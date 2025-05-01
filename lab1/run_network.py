@@ -28,7 +28,6 @@ from mininet.link import TCLink
 from mininet.cli import CLI
 from mininet.log import setLogLevel
 
-
 class NetworkTopo(Topo):
 
     def __init__(self):
@@ -36,6 +35,21 @@ class NetworkTopo(Topo):
         Topo.__init__(self)
 
         # Build the specified network topology here
+        h1 = self.addHost('h1', ip='10.0.1.2')
+        h2 = self.addHost('h2', ip='10.0.1.3')
+        ser = self.addHost('ser', ip='10.0.2.2')
+        ext = self.addHost('ext', ip='192.168.1.123')
+
+        s1 = self.addSwitch('s1')
+        s2 = self.addSwitch('s2')
+        s3 = self.addSwitch('s3') # router
+
+        self.addLink(h1, s1, bw=15, delay='10ms')
+        self.addLink(h2, s1, bw=15, delay='10ms')
+        self.addLink(ser, s2, bw=15, delay='10ms')
+        self.addLink(ext, s3, bw=15, delay='10ms')
+        self.addLink(s1, s3, bw=15, delay='20ms')
+        self.addLink(s2, s3, bw=15, delay='20ms')
 
 def run():
     topo = NetworkTopo()

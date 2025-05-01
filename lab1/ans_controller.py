@@ -19,12 +19,16 @@
  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  """
 
+# For an introduction with a dump L2 switch see: https://ryu.readthedocs.io/en/latest/writing_ryu_app.html
+# For examples see: https://github.com/faucetsdn/ryu/tree/master/ryu/app
+
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
-
+from ryu.utils import hex_array
+from ryu.lib.packet import packet, ethernet
 
 class LearningSwitch(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -33,7 +37,7 @@ class LearningSwitch(app_manager.RyuApp):
         super(LearningSwitch, self).__init__(*args, **kwargs)
 
         # Here you can initialize the data structures you want to keep at the controller
-        
+        self.mac_port_map = {}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -49,6 +53,7 @@ class LearningSwitch(app_manager.RyuApp):
         self.add_flow(datapath, 0, match, actions)
 
     # Add a flow entry to the flow-table
+    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPFlowMod
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -60,10 +65,55 @@ class LearningSwitch(app_manager.RyuApp):
         datapath.send_msg(mod)
 
     # Handle the packet_in event
+    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#packet-in-message
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
         
         msg = ev.msg
-        datapath = msg.datapath
+        dp = msg.datapath               # See: https://ryu.readthedocs.io/en/latest/ryu_app_api.html#ryu-controller-controller-datapath
+        dp_id = dp.id                   # 64-bit OpenFlow Datapath ID to identify the switch
+        ofp = dp.ofproto                # OpenFlow definitions
+        ofp_parser = dp.ofproto_parser  # OpenFlow wire message encoder and decoder
 
         # Your controller implementation should start here
+        in_port = msg.match['in_port']
+
+        if msg.reason == ofp.OFPR_NO_MATCH:
+            reason = 'NO MATCH'
+        else:
+            reason = 'not supported yet'
+
+        self.logger.debug('OFPPacketIn received on port %d: '
+                            'buffer_id=%x total_len=%d reason=%s '
+                            'table_id=%d cookie=%d match=%s data=%s',
+                            in_port, msg.buffer_id, msg.total_len, reason,
+                            msg.table_id, msg.cookie, msg.match,
+                            hex_array(msg.data))
+        
+        # Parse the packet
+        # See: https://ryu.readthedocs.io/en/latest/library_packet.html
+        # See: https://ryu.readthedocs.io/en/latest/library_packet_ref/packet_ethernet.html#module-ryu.lib.packet.ethernet
+        frame = packet.Packet(msg.data)
+        eth = frame.get_protocol(ethernet.ethernet) 
+        eth_src = eth.src
+        eth_dst = eth.dst
+
+        # Learn the MAC address and port mapping
+        if dp_id not in self.mac_port_map:
+            self.mac_port_map[dp_id] = {} # Initialize the mapping for this new switch
+        self.mac_port_map[dp_id][eth_src] = in_port
+
+        # Check if the destination MAC address is known
+        if eth_dst in self.mac_port_map[dp_id]:
+            out_port = self.mac_port_map[dp_id][eth_dst] # Forward the packet to the corresponding port
+            match = ofp_parser.OFPMatch(in_port=in_port, eth_dst=eth_dst) # New match rule
+            actions = [ofp_parser.OFPActionOutput(out_port)]
+            self.add_flow(dp, 1, match, actions) # Add a flow to the switch
+        else:
+            out_port = ofp.OFPP_FLOOD # Flood on all ports
+            actions = [ofp_parser.OFPActionOutput(out_port)]
+
+        # Send the packet out to the switch either to the known port or flood it
+        # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
+        msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, in_port, actions, msg.data)
+        dp.send_msg(msg) # 	Queue an OpenFlow message to send to the corresponding switch

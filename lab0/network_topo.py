@@ -59,7 +59,8 @@ topos = {'bridge': (lambda: BridgeTopo())}
 if __name__ == '__main__':
     topo = BridgeTopo()
 
-    net = Mininet(topo=topo)
+    # net = Mininet(topo=topo)
+    net = Mininet(topo=topo, controller=None)
 #     # net = Mininet(topo=topo, link=TCLink)
 #     # net = Mininet(topo=topo, link=TCLink, controller=OVSController)
 #     net = Mininet(topo=topo, link=TCLink, controller=Controller) # not installed
