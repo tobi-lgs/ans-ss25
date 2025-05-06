@@ -35,10 +35,10 @@ class NetworkTopo(Topo):
         Topo.__init__(self)
 
         # Build the specified network topology here
-        h1 = self.addHost('h1', ip='10.0.1.2')
-        h2 = self.addHost('h2', ip='10.0.1.3')
-        ser = self.addHost('ser', ip='10.0.2.2')
-        ext = self.addHost('ext', ip='192.168.1.123')
+        h1 = self.addHost('h1', ip='10.0.1.2/24')
+        h2 = self.addHost('h2', ip='10.0.1.3/24')
+        ser = self.addHost('ser', ip='10.0.2.2/24')
+        ext = self.addHost('ext', ip='192.168.1.123/24')
 
         s1 = self.addSwitch('s1')
         s2 = self.addSwitch('s2')

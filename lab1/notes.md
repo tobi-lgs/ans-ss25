@@ -140,3 +140,46 @@ Start the custom controller.
 ```bash
 ryu-manager ans_controller.py
 ```
+
+Test the network by pinging `h2` from `h1`.
+
+```bash
+mininet> h1 ping -c1 h2
+PING 10.0.1.3 (10.0.1.3) 56(84) bytes of data.
+64 bytes from 10.0.1.3: icmp_seq=1 ttl=64 time=42.9 ms
+
+--- 10.0.1.3 ping statistics ---
+1 packets transmitted, 1 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 42.925/42.925/42.925/0.000 ms
+```
+
+Then try to ping other connections with the `pingall` command.
+
+```bash
+mininet> pingall
+*** Ping: testing ping reachability
+ext -> X X X
+h1 -> X h2 X
+h2 -> X h1 X
+ser -> X X X
+*** Results: 83% dropped (2/12 received)
+```
+
+As expected, the ping between `h1` and `h2` works, but the ping to the external network does not work. Also iperf between `h1` and `h2` doesn't work yet.
+
+See what the switch `s1` has learned:
+
+```bash
+vagrant@ans-vm:/vagrant/lab1$ sudo ovs-ofctl dump-flows s1
+  cookie=0x0, duration=874.499s, table=0, n_packets=2247, n_bytes=148310, priority=1,in_port="s1-eth2",dl_dst=fa:b2:cd:84:28:f0 actions=output:"s1-eth1"
+  cookie=0x0, duration=874.477s, table=0, n_packets=2328, n_bytes=6707224, priority=1,in_port="s1-eth1",dl_dst=4a:24:67:15:93:45 actions=output:"s1-eth2"
+  cookie=0x0, duration=876.864s, table=0, n_packets=74, n_bytes=5592, priority=0 actions=CONTROLLER:65535
+```
+
+Formatted output:
+
+| **Cookie** | **Duration (s)** | **Table** | **Packets** | **Bytes** | **In Port**  | **Destination MAC**      | **Action (Output Port)** | **Priority** |
+|------------|------------------|-----------|-------------|-----------|--------------|---------------------------|---------------------------|--------------|
+| 0x0        | 874.499          | 0         | 2247        | 148310    | s1-eth2      | fa:b2:cd:84:28:f0         | s1-eth1                   | 1            |
+| 0x0        | 874.477          | 0         | 2328        | 6707224   | s1-eth1      | 4a:24:67:15:93:45         | s1-eth2                   | 1            |
+| 0x0        | 876.864          | 0         | 74          | 5592      |              |                           | CONTROLLER:65535          | 0            |
