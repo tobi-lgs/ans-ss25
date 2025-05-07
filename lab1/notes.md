@@ -183,3 +183,128 @@ Formatted output:
 | 0x0        | 874.499          | 0         | 2247        | 148310    | s1-eth2      | fa:b2:cd:84:28:f0         | s1-eth1                   | 1            |
 | 0x0        | 874.477          | 0         | 2328        | 6707224   | s1-eth1      | 4a:24:67:15:93:45         | s1-eth2                   | 1            |
 | 0x0        | 876.864          | 0         | 74          | 5592      |              |                           | CONTROLLER:65535          | 0            |
+
+## Task 2: Routers Are Busy
+
+The controller knows the following mapping of the router:
+
+```python
+# Router port MACs assumed by the controller
+port_to_own_mac = {
+1: "00:00:00:00:01:01",
+2: "00:00:00:00:01:02",
+3: "00:00:00:00:01:03"
+}
+# Router port (gateways) IP addresses assumed by the controller
+port_to_own_ip = {
+1: "10.0.1.1",
+2: "10.0.2.1",
+3: "192.168.1.1"
+}
+```
+
+Task:
+    - The router must route all traffic between the subnets (identified by their unique IP prefixes).
+    - The router must learn the routes.
+    - All hosts should be able to ping each other, except host ext which should not be able to ping any of the other (internal) hosts
+    - All hosts should be able to reach each other with TCP/UDP connections, except that such connections between ext and ser are not allowed due to security reasons
+
+The controller must do the following to enable the router functionality:
+
+Strategy: 
+
+This happens when a host (e.g. `h1`) sends a packet to a host in a different subnet (e.g. `ser`) for the first time without knowing the MAC address of the destination host:
+
+```mermaid
+sequenceDiagram
+    participant h1 as Host h1 (10.0.1.2)
+    participant s1 as Switch s1
+    participant s3 as Router s3 (interface 10.0.1.X)
+    participant s2 as Switch s2
+    participant ser as Host ser (10.0.2.2)
+
+    Note over h1: h1 wants to ping ser (10.0.2.2)
+    Note over h1: h1 checks ARP cache for default gateway MAC
+
+    h1->>s1: Broadcast ARP Request (Who has 10.0.1.1?)
+    s1->>s3: ARP Request forwarded (broadcast)
+    s3-->>s1: ARP Reply (10.0.1.1 is at XX:XX:XX:XX:XX:XX)
+    s1-->>h1: ARP Reply forwarded to h1
+
+    Note over h1: h1 now knows MAC of gateway (s3)
+
+    h1->>s1: Send ICMP Echo Request to ser (dest IP 10.0.2.2, MAC dest = s3)
+    s1->>s3: Forward Echo Request to router
+    s3->>s2: Route packet to 10.0.2.0/24
+    s2->>ser: Deliver ICMP Echo Request
+
+    Note over ser: ICMP Echo Reply generated
+
+    ser->>s2: Send ICMP Echo Reply (dest IP 10.0.1.2)
+    s2->>s3: Forward to router
+    s3->>s1: Route back to 10.0.1.0/24
+    s1->>h1: Deliver Echo Reply
+
+    Note over h1: Ping complete, reply received
+```
+
+>Idea: Also include `h2` which does not respond to the ARP request.
+
+The actual SDN flow including a controller assuming the controller knows the MAC and IP addresses of the router ports:
+    
+```mermaid
+sequenceDiagram
+    participant h1 as Host h1 (10.0.1.2) <br> [MAC 00:00:00:00:01:02]
+    participant s1 as Switch s1
+    participant s3 as Router s3 (10.0.1.1, 10.0.2.1) <br> [MAC 00:00:00:00:01:01, <br> 00:00:00:00:01:02]
+    participant s2 as Switch s2
+    participant ser as Host ser (10.0.2.2) <br> [MAC 00:00:00:00:02:02]
+    participant c1 as Controller c1
+
+    Note over h1: h1 wants to ping 10.0.2.2
+
+    %% --- ARP Phase ---
+    h1->>s1: ARP Request: "Who has 10.0.1.1?"
+    s1->>c1: Packet-In: "What to do with dst MAC FF:FF:FF:FF:FF:FF?"
+    c1-->>s1: AddFlow: "MAC 00:00:00:00:01:01 is at port 1"
+    c1-->>s1: Packet-Out: "Flood broadcast MAC to all ports"
+    s1->>s3: ARP Request: "Who has 10.0.1.1?"
+    Note over s3: Is the controller involved here?
+    s3->>c1: Packet-In: "What to do with ARP request?"
+    c1-->>s3: AddFlow: "IP 10.0.0.0/24 is at port 1"
+    c1-->>s3: Packet-Out: "Send ARP reply to port 1"
+    s3->>s1: ARP Reply: 10.0.1.1 is at 00:00:00:00:01:01"
+    s1->>h1: ARP Reply
+
+    %% --- ICMP Echo Request Phase ---
+    h1->>s1: ICMP Echo Request to 10.0.2.2
+    s1->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:01?"
+    c1-->>s1: FlowMod: "Forward MAC 00:00:00:00:01:01 to port → s3"
+    s1->>s3: Forward packet to s3
+
+    s3->>c1: Packet-In: "New IP dst 10.0.2.2"
+    c1-->>s3: FlowMod: "Route to port → s2"
+    s3->>s2: Forward packet to s2
+
+    s2->>c1: Packet-In: "Unknown dst MAC 00:00:00:00:00:22 (ser)"
+    c1-->>s2: FlowMod: "Flood unknown MAC"
+    s2->>ser: Deliver ICMP Echo Request
+
+    %% --- ICMP Echo Reply Phase (ser replies) ---
+    ser->>s2: ICMP Echo Reply to h1
+    s2->>c1: Packet-In: "src MAC 00:00:00:00:00:22 seen on port N"
+    c1-->>s2: FlowMod: "Forward MAC 00:00:00:00:00:22 to port N"
+    s2->>s3: Forward Echo Reply
+
+    s3->>s1: Forward via flow
+    s1->>h1: Deliver Echo Reply
+
+    Note over h1: Ping complete, return path now has flows
+
+```
+
+>Task: Support broadcast MAC address for ARP requests.
+
+>Question: Does the controller need to manage an ARP table for the router? See [here](https://github.com/knetsolutions/learn-sdn-with-ryu/blob/master/ryu_part9.md)
+
+>Note: Not sure whether the controller may instruct the switch to send the ARP reply directly to the host, though this information is available in this case. The controller could also instruct the switch to send the ARP reply to all ports (flooding).

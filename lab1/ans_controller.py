@@ -21,6 +21,7 @@
 
 # For an introduction with a dump L2 switch see: https://ryu.readthedocs.io/en/latest/writing_ryu_app.html
 # For examples see: https://github.com/faucetsdn/ryu/tree/master/ryu/app
+# For logging see: https://docs.python.org/3/library/logging.html
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -28,7 +29,8 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.utils import hex_array
-from ryu.lib.packet import packet, ethernet
+from ryu.lib.packet import packet, ethernet, ether_types # for L2 packets
+from ryu.lib.packet import ipv4, arp, icmp, tcp, udp # for L3 packets
 
 class LearningSwitch(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -37,7 +39,26 @@ class LearningSwitch(app_manager.RyuApp):
         super(LearningSwitch, self).__init__(*args, **kwargs)
 
         # Here you can initialize the data structures you want to keep at the controller
-        self.mac_port_map = {}
+
+        # Layer 2 switch MAC address table
+        self.mac_port_map = {} # {dp_id: {mac: port}}
+
+        # Layer 3 router port MACs and IP addresses
+        self.ip_port_map = {} # {dp_id : {ip: port}}
+        self.ip_mac_map = {} # {dp_id : {ip: mac}}
+
+        # Router port MACs assumed by the controller
+        self.router_port_to_own_mac = {
+            1: "00:00:00:00:01:01",
+            2: "00:00:00:00:01:02",
+            3: "00:00:00:00:01:03"
+        }
+        # Router port (gateways) IP addresses assumed by the controller
+        self.router_port_to_own_ip = {
+            1: "10.0.1.1",
+            2: "10.0.2.1",
+            3: "192.168.1.1"
+        }
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -93,8 +114,32 @@ class LearningSwitch(app_manager.RyuApp):
         # Parse the packet
         # See: https://ryu.readthedocs.io/en/latest/library_packet.html
         # See: https://ryu.readthedocs.io/en/latest/library_packet_ref/packet_ethernet.html#module-ryu.lib.packet.ethernet
-        frame = packet.Packet(msg.data)
-        eth = frame.get_protocol(ethernet.ethernet) 
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocol(ethernet.ethernet) 
+
+        # For the router check the ethertype
+        if eth.ethertype == ether_types.ETH_TYPE_IP:
+            # Handle IP packets here
+            ip = pkt.get_protocol(ipv4.ipv4)
+            srcip = ip.src
+            dstip = ip.dst
+            protocol = ip.proto
+            # Then check the protocol
+            if protocol == protocol.IPPROTO_ICMP: # for ping
+                pass # Handle ICMP packets here
+            elif protocol == protocol.IPPROTO_TCP: # for iperf TCP
+                pass # Handle TCP packets here
+            elif protocol == protocol.IPPROTO_UDP: # for iperf UDP
+                pass # Handle UDP packets here
+            else:
+                self.logger.info("Unsupported protocol: %s", protocol)
+                return
+        elif eth.ethertype == ether_types.ETH_TYPE_ARP:
+            pass # Handle ARP packets here
+        else:
+            self.logger.info("Unsupported ethertype: %s", hex(eth.ethertype))
+            return
+        
         eth_src = eth.src
         eth_dst = eth.dst
 
