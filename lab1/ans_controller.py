@@ -123,17 +123,7 @@ class LearningSwitch(app_manager.RyuApp):
             ip = pkt.get_protocol(ipv4.ipv4)
             srcip = ip.src
             dstip = ip.dst
-            protocol = ip.proto
-            # Then check the protocol
-            if protocol == protocol.IPPROTO_ICMP: # for ping
-                pass # Handle ICMP packets here
-            elif protocol == protocol.IPPROTO_TCP: # for iperf TCP
-                pass # Handle TCP packets here
-            elif protocol == protocol.IPPROTO_UDP: # for iperf UDP
-                pass # Handle UDP packets here
-            else:
-                self.logger.info("Unsupported protocol: %s", protocol)
-                return
+            protocol = ip.proto # does not matter for the router
         elif eth.ethertype == ether_types.ETH_TYPE_ARP:
             pass # Handle ARP packets here
         else:
@@ -146,9 +136,12 @@ class LearningSwitch(app_manager.RyuApp):
         # Learn the MAC address and port mapping
         if dp_id not in self.mac_port_map:
             self.mac_port_map[dp_id] = {} # Initialize the mapping for this new switch
-        self.mac_port_map[dp_id][eth_src] = in_port
+        self.mac_port_map[dp_id][eth_src] = in_port # Memorize the source MAC on the current port
+        # Do not install a flow here, pre-installing flows for hypothetical future packets could create stale routes
+        # Only install paths as they are needed, see below.
 
         # Check if the destination MAC address is known
+        # Only install the flow when a packet is sent to a known MAC address to verify the path exists, ensuring the flow is only installed when needed.
         if eth_dst in self.mac_port_map[dp_id]:
             out_port = self.mac_port_map[dp_id][eth_dst] # Forward the packet to the corresponding port
             match = ofp_parser.OFPMatch(in_port=in_port, eth_dst=eth_dst) # New match rule

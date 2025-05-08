@@ -235,6 +235,13 @@ sequenceDiagram
 
     h1->>s1: Send ICMP Echo Request to ser (dest IP 10.0.2.2, MAC dest = s3)
     s1->>s3: Forward Echo Request to router
+    s3->>s2: Broadcast ARP Request (Who has 10.0.2.2?)
+    s2->>ser: ARP Request forwarded (broadcast)
+    ser-->>s2: ARP Reply (10.0.2.2 is at XX:XX:XX:XX:XX:XX)
+    s2-->>s3: ARP Reply forwarded to router
+
+    Note over s3: Router now knows MAC of ser
+
     s3->>s2: Route packet to 10.0.2.0/24
     s2->>ser: Deliver ICMP Echo Request
 
@@ -266,12 +273,10 @@ sequenceDiagram
     %% --- ARP Phase ---
     h1->>s1: ARP Request: "Who has 10.0.1.1?"
     s1->>c1: Packet-In: "What to do with dst MAC FF:FF:FF:FF:FF:FF?"
-    c1-->>s1: AddFlow: "MAC 00:00:00:00:01:01 is at port 1"
+    c1-->>s1: AddFlow: "MAC 00:00:00:00:01:02 is at port 1"
     c1-->>s1: Packet-Out: "Flood broadcast MAC to all ports"
     s1->>s3: ARP Request: "Who has 10.0.1.1?"
-    Note over s3: Is the controller involved here?
     s3->>c1: Packet-In: "What to do with ARP request?"
-    c1-->>s3: AddFlow: "IP 10.0.0.0/24 is at port 1"
     c1-->>s3: Packet-Out: "Send ARP reply to port 1"
     s3->>s1: ARP Reply: 10.0.1.1 is at 00:00:00:00:01:01"
     s1->>h1: ARP Reply
