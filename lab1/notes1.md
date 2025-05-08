@@ -129,16 +129,16 @@ s3:
 
 ## Task 1: Everyone Is Learning, Including Switches
 
+Start the custom controller first.
+
+```bash
+ryu-manager ans_controller.py
+```
+
 Run mininet with the topology defined in the python script.
 
 ```bash
 sudo python3 run_network.py
-```
-
-Start the custom controller.
-
-```bash
-ryu-manager ans_controller.py
 ```
 
 Test the network by pinging `h2` from `h1`.
@@ -242,7 +242,7 @@ sequenceDiagram
 
     Note over s3: Router now knows MAC of ser
 
-    s3->>s2: Route packet to 10.0.2.0/24
+    s3->>s2: Route packet to port with 10.0.2.0/24
     s2->>ser: Deliver ICMP Echo Request
 
     Note over ser: ICMP Echo Reply generated
@@ -261,48 +261,80 @@ The actual SDN flow including a controller assuming the controller knows the MAC
     
 ```mermaid
 sequenceDiagram
-    participant h1 as Host h1 (10.0.1.2) <br> [MAC 00:00:00:00:01:02]
+    participant h1 as Host h1 (10.0.1.2) <br> [MAC 00:00:00:00:01:AA]
     participant s1 as Switch s1
     participant s3 as Router s3 (10.0.1.1, 10.0.2.1) <br> [MAC 00:00:00:00:01:01, <br> 00:00:00:00:01:02]
     participant s2 as Switch s2
-    participant ser as Host ser (10.0.2.2) <br> [MAC 00:00:00:00:02:02]
+    participant ser as Host ser (10.0.2.2) <br> [MAC 00:00:00:00:02:CC]
     participant c1 as Controller c1
 
     Note over h1: h1 wants to ping 10.0.2.2
+    Note over h1: h1 notices that IP belongs to different subnet
+    Note over h1: h1 has no ARP cache entry for gateway
 
     %% --- ARP Phase ---
-    h1->>s1: ARP Request: "Who has 10.0.1.1?"
+    h1->>s1: [ARP] ARP Request: "Who has 10.0.1.1?"
     s1->>c1: Packet-In: "What to do with dst MAC FF:FF:FF:FF:FF:FF?"
-    c1-->>s1: AddFlow: "MAC 00:00:00:00:01:02 is at port 1"
+    Note over c1: Memorize MAC and Port of h1 at s1
     c1-->>s1: Packet-Out: "Flood broadcast MAC to all ports"
     s1->>s3: ARP Request: "Who has 10.0.1.1?"
     s3->>c1: Packet-In: "What to do with ARP request?"
+    Note over c1: Got packet of ETH_TYPE_ARP
+    Note over c1: Prepare ARP reply with own MAC and IP of s3
+    Note over c1: Use input port for ARP reply
     c1-->>s3: Packet-Out: "Send ARP reply to port 1"
-    s3->>s1: ARP Reply: 10.0.1.1 is at 00:00:00:00:01:01"
-    s1->>h1: ARP Reply
+    s3->>s1: ARP Reply: "10.0.1.1 is at 00:00:00:00:01:01"
+    s1->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:AA?"
+    Note over c1: Memorize MAC and Port of s3 at s1
+    Note over c1: Recall that MAC of h1 was seen on port 1
+    c1-->>s1: FlowMod: "Forward known MAC 00:00:00:00:01:AA to port 1"
+    Note over s1: s1 now knows s3->h1 mapping
+    c1-->>s1: Packet-Out: "Forward ARP reply to port 1"
+    s1->>h1: ARP Reply: "10.0.1.1 is at 00:00:00:00:01:01"
+    Note over h1: h1 now knows MAC of gateway (s3)
 
     %% --- ICMP Echo Request Phase ---
-    h1->>s1: ICMP Echo Request to 10.0.2.2
+    Note over h1: Proceed with ICMP Echo Request
+    h1->>s1: [IP] ICMP Echo Request to 10.0.2.2
     s1->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:01?"
-    c1-->>s1: FlowMod: "Forward MAC 00:00:00:00:01:01 to port → s3"
-    s1->>s3: Forward packet to s3
-
-    s3->>c1: Packet-In: "New IP dst 10.0.2.2"
-    c1-->>s3: FlowMod: "Route to port → s2"
-    s3->>s2: Forward packet to s2
-
-    s2->>c1: Packet-In: "Unknown dst MAC 00:00:00:00:00:22 (ser)"
-    c1-->>s2: FlowMod: "Flood unknown MAC"
+    c1-->>s1: FlowMod: "Forward MAC 00:00:00:00:01:01 to port 3"
+    Note over s1: s1 now knows h1->s3 mapping
+    s1->>s3: Forward ICMP packet to s3
+    s3->>c1: Packet-In: "What to do with IP dst 10.0.2.2?"
+    %% --- ARP for getting the MAC of ser Phase ---
+    Note over c1: c1 (router) has no ARP cache entry for ser
+    Note over c1: Parse network address and look up IP-to-Port mapping
+    Note over c1: Prepare ARP request for MAC of ser<br>and send on looked up port
+    c1-->>s3: Packet-Out: "Send ARP request for 10.0.2.2 on port 2"
+    s3->>s2: ARP Request: "Who has 10.0.2.2?"
+    s2->>c1: Packet-In: "What to do with dst MAC FF:FF:FF:FF:FF:FF?"
+    Note over c1: Memorize MAC and Port of s3 at s2
+    c1-->>s2: Packet-Out: "Flood broadcast MAC to all ports"
+    s2->>ser: ARP Request: "Who has 10.0.2.2?"
+    ser->>s2: ARP Reply: "10.0.2.2 is at 00:00:00:00:02:CC"
+    s2->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:02?"
+    Note over c1: Memorize MAC and Port of ser at s2
+    Note over c1: Recall that MAC of s3 was seen on port 1
+    %% Theoretically, the controller could just finish the ARP request here and drop the packet, because not the router wanted to know the MAC of ser, but the controller.
+    c1-->>s2: FlowMod: "Forward MAC 00:00:00:00:01:02 to port 1"
+    c1-->>s2: Packet-Out: "Forward ARP reply to port 1"
+    s2->>s3: ARP Reply: "10.0.2.2 is at 00:00:00:00:02:CC"
+    Note over s3: s3 / router is only modeled as a switch,<br>it doesn't know that this is its own MAC address
+    s3->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:02?"
+    Note over c1: s3 / c1 now knows MAC of ser and continues<br>with paused ICMP Echo request
+    %% --- Resume ICMP Echo Request Phase ---
+    Note over c1: Modify ICMP packet to include MAC of ser
+    c1-->>s3: Packet-Out: "Forward ICMP packet to port 2"
+    s3->>s2: Forward ICMP packet to s2
+    s2->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:02:CC?"
+    Note over c1: Recall that MAC of ser was seen on port 2
+    c1-->>s2: FlowMod: "Forward MAC 00:00:00:00:02:CC to port 2"
+    c1-->>s2: Packet-Out: "Forward ICMP packet to port 2"
     s2->>ser: Deliver ICMP Echo Request
 
     %% --- ICMP Echo Reply Phase (ser replies) ---
-    ser->>s2: ICMP Echo Reply to h1
-    s2->>c1: Packet-In: "src MAC 00:00:00:00:00:22 seen on port N"
-    c1-->>s2: FlowMod: "Forward MAC 00:00:00:00:00:22 to port N"
-    s2->>s3: Forward Echo Reply
-
-    s3->>s1: Forward via flow
-    s1->>h1: Deliver Echo Reply
+    Note over ser: ser notices that IP belongs to different subnet
+    Note over ser: ser has no ARP cache entry for gateway
 
     Note over h1: Ping complete, return path now has flows
 
@@ -311,5 +343,3 @@ sequenceDiagram
 >Task: Support broadcast MAC address for ARP requests.
 
 >Question: Does the controller need to manage an ARP table for the router? See [here](https://github.com/knetsolutions/learn-sdn-with-ryu/blob/master/ryu_part9.md)
-
->Note: Not sure whether the controller may instruct the switch to send the ARP reply directly to the host, though this information is available in this case. The controller could also instruct the switch to send the ARP reply to all ports (flooding).

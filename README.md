@@ -23,12 +23,15 @@ Run `vagrant up` in the root directory of the repository to install and start th
 Alternatively, you can use the following command to log in directly:
 
 ```powershell
-ssh -i "C:/git_workspace/ans-ss25/.vagrant/machines/default/virtualbox/private_key" -p 2222 -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa vagrant@127.0.0.1
+ssh -Y -i "./.vagrant/machines/default/virtualbox/private_key" -p 2222 -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa vagrant@127.0.0.1
 ```
+
+Then enter `export DISPLAY=localhost:10.0` into the terminal of the VM to enable X11 forwarding. This will allow you to run GUI applications from the VM on your local machine. Test with `xclock` or `xeyes`.
+To make the last step permanent, edit the `~/.bashrc` file in the VM with `nano ~/.bashrc` and add the line `export DISPLAY=localhost:10.0` at the end of the file. This will set the `DISPLAY` variable every time you log in to the VM.
 
 Or configure Putty like described [here](https://jcook0017.medium.com/how-to-enable-x11-forwarding-in-windows-10-on-a-vagrant-virtual-box-running-ubuntu-d5a7b34363f).
 
-Note that these two approaches already include the necessary SSH options for X11 forwarding. The basic `vagrant ssh` command does not include these options, so you need to add them manually if you want to use X11 forwarding.
+>Remember to launch Xming before running the SSH command.
 
 ### Stopping the VM
 

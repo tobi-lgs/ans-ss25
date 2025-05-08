@@ -98,6 +98,7 @@ class LearningSwitch(app_manager.RyuApp):
 
         # Your controller implementation should start here
         in_port = msg.match['in_port']
+        self.logger.info("Packet received from switch: (DPID %d)", dp_id)
 
         if msg.reason == ofp.OFPR_NO_MATCH:
             reason = 'NO MATCH'
@@ -133,14 +134,14 @@ class LearningSwitch(app_manager.RyuApp):
         eth_src = eth.src
         eth_dst = eth.dst
 
-        # Learn the MAC address and port mapping
+        # Learn the MAC address and port mapping (step 1)
         if dp_id not in self.mac_port_map:
             self.mac_port_map[dp_id] = {} # Initialize the mapping for this new switch
         self.mac_port_map[dp_id][eth_src] = in_port # Memorize the source MAC on the current port
         # Do not install a flow here, pre-installing flows for hypothetical future packets could create stale routes
         # Only install paths as they are needed, see below.
 
-        # Check if the destination MAC address is known
+        # Check if the destination MAC address is known (step 2)
         # Only install the flow when a packet is sent to a known MAC address to verify the path exists, ensuring the flow is only installed when needed.
         if eth_dst in self.mac_port_map[dp_id]:
             out_port = self.mac_port_map[dp_id][eth_dst] # Forward the packet to the corresponding port
@@ -150,6 +151,8 @@ class LearningSwitch(app_manager.RyuApp):
         else:
             out_port = ofp.OFPP_FLOOD # Flood on all ports
             actions = [ofp_parser.OFPActionOutput(out_port)]
+            # This also covers the broadcast case, where the destination MAC is a broadcast address (ff:ff:ff:ff:ff:ff)
+            # because the switch will never learn an entry for the broadcast address.
 
         # Send the packet out to the switch either to the known port or flood it
         # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
