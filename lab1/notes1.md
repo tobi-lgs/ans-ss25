@@ -234,6 +234,9 @@ sequenceDiagram
 
     h1->>s1: Send ICMP Echo Request to ser (dest IP 10.0.2.2, MAC dest = s3)
     s1->>s3: Forward Echo Request to router
+
+    Note over s3: Router checks ARP cache for ser MAC
+
     s3->>s2: Broadcast ARP Request (Who has 10.0.2.2?)
     s2->>ser: ARP Request forwarded (broadcast)
     ser-->>s2: ARP Reply (10.0.2.2 is at XX:XX:XX:XX:XX:XX)
@@ -244,10 +247,22 @@ sequenceDiagram
     s3->>s2: Route packet to port with 10.0.2.0/24
     s2->>ser: Deliver ICMP Echo Request
 
+    Note over ser: ser checks ARP cache for default gateway MAC
+
+    ser->>s2: Broadcast ARP Request (Who has 10.0.2.1?)
+    s2->>s3: ARP Request forwarded (broadcast)
+    s3-->>s2: ARP Reply (10.0.2.1 is at XX:XX:XX:XX:XX:XX)
+    s2-->>ser: ARP Reply forwarded to ser
+
+    Note over ser: ser now knows MAC of gateway (s3)
+
     Note over ser: ICMP Echo Reply generated
 
     ser->>s2: Send ICMP Echo Reply (dest IP 10.0.1.2)
     s2->>s3: Forward to router
+
+    Note over s3: Router finds ARP cache entry for h1
+
     s3->>s1: Route back to 10.0.1.0/24
     s1->>h1: Deliver Echo Reply
 
@@ -298,6 +313,7 @@ sequenceDiagram
     Note over h1: Proceed with ICMP Echo Request
     h1->>s1: [IP] ICMP Echo Request to 10.0.2.2
     s1->>c1: Packet-In: "What to do with dst MAC 00:00:00:00:01:01?"
+    Note over c1: Recall that MAC of s3 was seen on port 2
     c1-->>s1: FlowMod: "Forward MAC 00:00:00:00:01:01 to port 3"
     Note over s1: s1 now knows h1->s3 mapping
     s1->>s3: Forward ICMP request to s3
@@ -378,7 +394,6 @@ sequenceDiagram
     s1->>h1: Deliver ICMP Echo Reply
 
     Note over h1: Ping complete
-
 ```
 
 Tasks:
