@@ -63,6 +63,17 @@ def run():
         ip="127.0.0.1", 
         port=6653)
     net.start()
+    
+    h1 = net.get('h1')
+    h2 = net.get('h2')
+    ser = net.get('ser')
+    ext = net.get('ext')
+    
+    print(h1.cmd('route add default gw 10.0.1.1'))
+    print(h2.cmd('route add default gw 10.0.1.1'))
+    print(ser.cmd('route add default gw 10.0.2.1'))
+    print(ext.cmd('route add default gw 192.168.1.1'))
+        
     CLI(net)
     net.stop()
 

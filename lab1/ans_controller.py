@@ -65,7 +65,7 @@ class LearningSwitch(app_manager.RyuApp):
         
         # When the router needs to first learn the MAC address of a host,
         # it will buffer the packet (the event) until the ARP reply is received
-        self.router_event_buffer = []
+        self.router_event_buffer = [] # [(event, dst_ip)]
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -113,7 +113,7 @@ class LearningSwitch(app_manager.RyuApp):
         in_port = msg.match['in_port']
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocol(ethernet.ethernet)
-        # For the router check the ethertype
+        
         if eth.ethertype == ether_types.ETH_TYPE_IP:
             # Handle IP packets here
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
@@ -123,16 +123,24 @@ class LearningSwitch(app_manager.RyuApp):
             if self.router_port_to_own_ip[in_port] == dst_ip:
                 # check if the packet is an ICMP echo request
                 if ip_pkt.proto == ipv4.inet.IPPROTO_ICMP:
+                    self.logger.info("Received ICMP echo request from %s to %s", src_ip, dst_ip)
                     self._handle_icmp_request(dp, ip_pkt, eth, in_port)
                 else:
                     self.logger.info("unsupported protocol")
             else: # packet is not for the router (actual routing)
+                self.logger.info("Packet is not for the router")
                 # check to which subnet the dstip belongs to determine the out_port
                 if self._in_same_subnet(dst_ip, self.router_port_to_own_ip[1]):
                     out_port = 1
                 elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip[2]):
                     out_port = 2
                 elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip[3]):
+                    self.logger.info("Packet is for the external network")
+                    # drop the packet, no communication with the external network allowed
+                    return
+                
+                if self._in_same_subnet(src_ip, self.router_port_to_own_ip[3]):
+                    self.logger.info("Packet is from the external network")
                     # drop the packet, no communication with the external network allowed
                     return
                 
@@ -140,17 +148,15 @@ class LearningSwitch(app_manager.RyuApp):
                     # drop the packet, no communication with the same port allowed
                     return
                 
-                # Update the MAC addresses, src = router MAC, dst = host MAC
                 # Check if the destination MAC address is known
                 if dst_ip in self.router_arp_table:
                     self._route_packet(dp, in_port, out_port, dst_ip, pkt)
                 else:
                     # Buffer the packet until the ARP reply is received
-                    self.router_event_buffer.append((dp, in_port, pkt))
+                    self.router_event_buffer.append((ev, dst_ip))
                     # Send an ARP request to learn the MAC address of the destination IP
                     self._send_arp_request(dp, out_port, dst_ip)
                     return
-        
         elif eth.ethertype == ether_types.ETH_TYPE_ARP:
             # Handle ARP packets here
             arp_pkt = pkt.get_protocol(arp.arp)
@@ -158,6 +164,8 @@ class LearningSwitch(app_manager.RyuApp):
                 self._handle_arp_request(dp, arp_pkt, eth, in_port)
             elif arp_pkt.opcode == arp.ARP_REPLY:
                 self._handle_arp_reply(dp, arp_pkt, eth, in_port)
+        elif eth.ethertype == ether_types.ETH_TYPE_IPV6:
+            pass # disable IPv6 logging
         else:
             self.logger.info("Unsupported ethertype: %s", hex(eth.ethertype))
         return
@@ -170,9 +178,9 @@ class LearningSwitch(app_manager.RyuApp):
         dst_mac = self.router_arp_table[dst_ip]
         src_mac = self.router_port_to_own_mac[in_port]
         
-        match = ofp_parser.OFPMatch(in_port=in_port) # @todo: add IP match fileds
+        match = ofp_parser.OFPMatch(in_port=in_port, ipv4_dst=dst_ip)
         
-        # @todo: manipulate the ethernet header
+        # Manipulate the ethernet header
         # see: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPActionSetField
         actions = [
             ofp_parser.OFPActionOutput(out_port),
@@ -182,12 +190,33 @@ class LearningSwitch(app_manager.RyuApp):
         
         self.add_flow(dp, 1, match, actions) # Add a flow to the router
         
-        # Send the packet out to the switch either to the known port or flood it
         msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, in_port, actions, pkt.data)
         dp.send_msg(msg)
     
     def _send_arp_request(self, dp, out_port, dst_ip):
-        pass # @todo
+        ofp_parser = dp.ofproto_parser
+        ofp = dp.ofproto
+        
+        router_mac = self.router_port_to_own_mac[out_port]
+        src_ip = self.router_port_to_own_ip[out_port]
+        
+        # Create an ARP request packet
+        arp_request = arp.arp(
+            opcode=arp.ARP_REQUEST,
+            src_mac=router_mac,
+            src_ip=src_ip,
+            dst_ip=dst_ip)
+        eth_request = ethernet.ethernet(ethertype=ether_types.ETH_TYPE_ARP, dst='ff:ff:ff:ff:ff:ff', src=router_mac)
+        
+        out_pkt = packet.Packet()
+        out_pkt.add_protocol(eth_request) # Create Ethernet header
+        out_pkt.add_protocol(arp_request) # Add ARP request to the packet
+        out_pkt.serialize()
+        
+        actions = [dp.ofproto_parser.OFPActionOutput(out_port)]
+        
+        msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, out_port, actions, out_pkt)
+        dp.send_msg(msg)
     
     def _handle_icmp_request(self, dp, ip_pkt, eth, in_port):
         eth_reply = ethernet.ethernet(dst=eth.src, src=eth.dst, ethertype=ether.ETH_TYPE_IP)
@@ -265,7 +294,10 @@ class LearningSwitch(app_manager.RyuApp):
             self.router_arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
             self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
             # Continue with previously buffered packets (e.g. ICMP echo requests)
-            # @todo
+            for (ev, dst_ip) in self.router_event_buffer:
+                if dst_ip in self.router_arp_table:
+                    self._packet_in_router_handler(ev)
+                    self.router_event_buffer.remove((ev, dst_ip))
         else: 
             # drop the packet, not for the router
             pass
