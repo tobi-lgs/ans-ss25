@@ -6,7 +6,7 @@ This repository contains code skeleton for the labs of Advanced Networked System
 
 ### Setup and Installation
 
-The first step is to adjust the `Vagrantfile`. 
+The first step is to adjust the `Vagrantfile`.
 
 Run `vagrant up` in the root directory of the repository to install and start the virtual machine. Then run `vagrant ssh` to log into the virtual machine. Check these fields:
 
@@ -35,7 +35,7 @@ Or configure Putty like described [here](https://jcook0017.medium.com/how-to-ena
 
 ### Stopping the VM
 
-Run `vagrant halt` to stop the VM. This will save the current state of the VM and shut it down. You can then start it again with `vagrant up`.	
+Run `vagrant halt` to stop the VM. This will save the current state of the VM and shut it down. You can then start it again with `vagrant up`.
 
 ### Troubleshooting
 
@@ -68,3 +68,21 @@ $privateKey = "C:\git_workspace\ans-ss25\.vagrant\machines\default\virtualbox\pr
 icacls $privateKey /inheritance:r
 icacls $privateKey /grant:r "$($env:USERNAME):(R)"
 ```
+
+#### Error `Exception: Error creating interface pair (s1-eth3,s3-eth2): RTNETLINK answers: File exists`
+
+Reason: Mininet failed previously and did not clean up properly.
+
+Solution: Manually delete the links, e.g.:
+
+```bash
+sudo ip link delete s1-eth3
+sudo ip link delete s2-eth2
+```
+
+### Mininet Commands
+
+- ping all hosts: `pingall`
+- ping between hosts: `h1 ping -c1 h2`
+- iperf between hosts: `iperf h1 h2`
+- print arp table of a host: `h1 arp -n`

@@ -47,9 +47,11 @@ class NetworkTopo(Topo):
         self.addLink(h1, s1, bw=15, delay='10ms')
         self.addLink(h2, s1, bw=15, delay='10ms')
         self.addLink(ser, s2, bw=15, delay='10ms')
-        self.addLink(ext, s3, bw=15, delay='10ms')
-        self.addLink(s1, s3, bw=15, delay='20ms')
-        self.addLink(s2, s3, bw=15, delay='20ms')
+        
+        # order of link creation is important!
+        self.addLink(s1, s3, bw=15, delay='20ms') # this will become port 1 of s3
+        self.addLink(s2, s3, bw=15, delay='20ms') # this will become port 2 of s3
+        self.addLink(ext, s3, bw=15, delay='10ms') # this will become port 3 of s3
 
 def run():
     topo = NetworkTopo()
@@ -69,6 +71,7 @@ def run():
     ser = net.get('ser')
     ext = net.get('ext')
     
+    # IP and subnet mask already defined, but default gateway not set yet
     print(h1.cmd('route add default gw 10.0.1.1'))
     print(h2.cmd('route add default gw 10.0.1.1'))
     print(ser.cmd('route add default gw 10.0.2.1'))

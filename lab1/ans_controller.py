@@ -98,10 +98,8 @@ class LearningSwitch(app_manager.RyuApp):
     def _packet_in_handler(self, ev):
         msg = ev.msg
         datapath = msg.datapath
-        self.logger.info("Packet received from switch: (DPID %d)", datapath.id)
         
         if datapath.id == self.router: # check types
-            self.logger.info("Router selected")
             self._packet_in_router_handler(ev)
         else:
             self._packet_in_switch_handler(ev)
@@ -128,35 +126,46 @@ class LearningSwitch(app_manager.RyuApp):
                 else:
                     self.logger.info("unsupported protocol")
             else: # packet is not for the router (actual routing)
-                self.logger.info("Packet is not for the router")
+                self.logger.info("IP packet is not for the router, routing required")
                 # check to which subnet the dstip belongs to determine the out_port
-                if self._in_same_subnet(dst_ip, self.router_port_to_own_ip[1]):
+                if self._in_same_subnet(dst_ip, self.router_port_to_own_ip.get(1)):
                     out_port = 1
-                elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip[2]):
+                elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip.get(2)):
                     out_port = 2
-                elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip[3]):
-                    self.logger.info("Packet is for the external network")
+                elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip.get(3)):
+                    self.logger.info("IP packet is for the external network, not allowed")
                     # drop the packet, no communication with the external network allowed
+                    return
+                else:
+                    self.logger.info("Target subnet unknown")
+                    # drop the packet
                     return
                 
                 if self._in_same_subnet(src_ip, self.router_port_to_own_ip[3]):
-                    self.logger.info("Packet is from the external network")
+                    self.logger.info("IP packet is from the external network, not allowed")
                     # drop the packet, no communication with the external network allowed
                     return
                 
                 if out_port == in_port: # same subnet
-                    # drop the packet, no communication with the same port allowed
+                    self.logger.info("IP packet from %s (port %d) to %s (port %d) \
+                                     is for same subnet but not for router",
+                                     src_ip, in_port, dst_ip, out_port)
+                    # drop the packet
                     return
                 
                 # Check if the destination MAC address is known
                 if dst_ip in self.router_arp_table:
-                    self._route_packet(dp, in_port, out_port, dst_ip, pkt)
+                    self.logger.info("Destination IP %s in ARP table, continue routing", dst_ip)
+                    self._route_packet(dp, in_port, src_ip, out_port, dst_ip, pkt)
+                    return
                 else:
+                    self.logger.info("Destination IP %s not in ARP table, send ARP request first", dst_ip)
                     # Buffer the packet until the ARP reply is received
                     self.router_event_buffer.append((ev, dst_ip))
                     # Send an ARP request to learn the MAC address of the destination IP
                     self._send_arp_request(dp, out_port, dst_ip)
                     return
+                
         elif eth.ethertype == ether_types.ETH_TYPE_ARP:
             # Handle ARP packets here
             arp_pkt = pkt.get_protocol(arp.arp)
@@ -170,7 +179,7 @@ class LearningSwitch(app_manager.RyuApp):
             self.logger.info("Unsupported ethertype: %s", hex(eth.ethertype))
         return
     
-    def _route_packet(self, dp, in_port, out_port, dst_ip, pkt):
+    def _route_packet(self, dp, in_port, src_ip, out_port, dst_ip, pkt):
         # Route the packet to the destination port
         ofp_parser = dp.ofproto_parser
         ofp = dp.ofproto
@@ -178,19 +187,29 @@ class LearningSwitch(app_manager.RyuApp):
         dst_mac = self.router_arp_table[dst_ip]
         src_mac = self.router_port_to_own_mac[in_port]
         
-        match = ofp_parser.OFPMatch(in_port=in_port, ipv4_dst=dst_ip)
+        self.logger.info("Routing packet from %s (port %d) to %s port(%d)", src_ip, in_port, dst_ip, out_port)
+        
+        match = ofp_parser.OFPMatch(
+            in_port=in_port,
+            eth_type=ether_types.ETH_TYPE_IP,
+            ipv4_dst=dst_ip) # add ipv4_src if flow should be host specific
         
         # Manipulate the ethernet header
         # see: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPActionSetField
         actions = [
-            ofp_parser.OFPActionOutput(out_port),
-            ofp_parser.OFPActionSetField(eth_src=src_mac),
-            ofp_parser.OFPActionSetField(eth_dst=dst_mac)
+            ofp_parser.OFPActionSetField(eth_src=src_mac), # the order of the actions is important
+            ofp_parser.OFPActionSetField(eth_dst=dst_mac),
+            ofp_parser.OFPActionOutput(out_port)
         ]
         
         self.add_flow(dp, 1, match, actions) # Add a flow to the router
         
-        msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, in_port, actions, pkt.data)
+        msg = ofp_parser.OFPPacketOut(
+            datapath=dp, 
+            buffer_id=ofp.OFP_NO_BUFFER,
+            in_port=in_port, # test: changed this to OFPP_CONTROLLER
+            actions=actions,
+            data=pkt.data)
         dp.send_msg(msg)
     
     def _send_arp_request(self, dp, out_port, dst_ip):
@@ -200,13 +219,19 @@ class LearningSwitch(app_manager.RyuApp):
         router_mac = self.router_port_to_own_mac[out_port]
         src_ip = self.router_port_to_own_ip[out_port]
         
+        self.logger.info("Sending ARP Request on port %d: Who-has %s? Tell %s", out_port, dst_ip, src_ip)
+        
         # Create an ARP request packet
         arp_request = arp.arp(
             opcode=arp.ARP_REQUEST,
             src_mac=router_mac,
+            dst_mac='ff:ff:ff:ff:ff:ff',
             src_ip=src_ip,
             dst_ip=dst_ip)
-        eth_request = ethernet.ethernet(ethertype=ether_types.ETH_TYPE_ARP, dst='ff:ff:ff:ff:ff:ff', src=router_mac)
+        eth_request = ethernet.ethernet(
+            ethertype=ether_types.ETH_TYPE_ARP,
+            dst='ff:ff:ff:ff:ff:ff',
+            src=router_mac)
         
         out_pkt = packet.Packet()
         out_pkt.add_protocol(eth_request) # Create Ethernet header
@@ -215,7 +240,12 @@ class LearningSwitch(app_manager.RyuApp):
         
         actions = [dp.ofproto_parser.OFPActionOutput(out_port)]
         
-        msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, out_port, actions, out_pkt)
+        msg = ofp_parser.OFPPacketOut(
+            datapath=dp,
+            buffer_id=ofp.OFP_NO_BUFFER,
+            in_port=ofp.OFPP_CONTROLLER, # important: not in_port but OFPP_CONTROLLER
+            actions=actions,
+            data=out_pkt)
         dp.send_msg(msg)
     
     def _handle_icmp_request(self, dp, ip_pkt, eth, in_port):
@@ -234,7 +264,7 @@ class LearningSwitch(app_manager.RyuApp):
         reply_pkt.add_protocol(eth_reply)
         reply_pkt.add_protocol(ip_reply)
         reply_pkt.add_protocol(icmp_reply)
-        reply_pkt.serialize()
+        reply_pkt.serialize() # fails: sth wrong with payload: assert isinstance(self.data, _ICMPv4Payload)
         
         actions = [dp.ofproto_parser.OFPActionOutput(in_port)]
         
@@ -253,33 +283,45 @@ class LearningSwitch(app_manager.RyuApp):
     
     # @todo: clean comments (remove llm comments)
     def _handle_arp_request(self, dp, arp_pkt, eth, in_port):
+        ofp_parser = dp.ofproto_parser
+        ofp = dp.ofproto
+        
         # Check if the request is for one of the router's IP addresses
         if arp_pkt.dst_ip in self.router_port_to_own_ip.values():
             # Send an ARP reply
-            self.logger.info("Received ARP Request: who-has %s? Tell %s",
-                            arp_pkt.dst_ip, arp_pkt.src_ip)
-            # Get the port number of the incoming interface
+            self.logger.info("Received ARP Request: Who-has %s? Tell %s", arp_pkt.dst_ip, arp_pkt.src_ip)
+            
             out_port = in_port
-            # Get the MAC address of the router's interface
             router_mac = self.router_port_to_own_mac[out_port]
-            # Create an ARP reply packet
+            
+            eth_reply = ethernet.ethernet(
+                ethertype=ether_types.ETH_TYPE_ARP,
+                dst=eth.src,
+                src=router_mac)
             arp_reply = arp.arp(
                 opcode=arp.ARP_REPLY,
                 src_mac=router_mac,
                 src_ip=arp_pkt.dst_ip,
                 dst_mac=arp_pkt.src_mac,
                 dst_ip=arp_pkt.src_ip)
-            # Send the ARP reply back to the host
-            eth_reply = ethernet.ethernet(ethertype=ether_types.ETH_TYPE_ARP, dst=eth.src, src=router_mac)
-            actions = [dp.ofproto_parser.OFPActionOutput(in_port)]
+            
             out_pkt = packet.Packet()
             out_pkt.add_protocol(eth_reply) # Create Ethernet header
             out_pkt.add_protocol(arp_reply) # Add ARP reply to the packet
             out_pkt.serialize()
-            ofp_parser = dp.ofproto_parser
-            ofp = dp.ofproto
-            msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, in_port, actions, out_pkt)
+            
+            actions = [dp.ofproto_parser.OFPActionOutput(in_port)]
+            
+            # Send the ARP reply back to the host
+            # setting in_port = ofp.OFPP_CONTROLLER is important
+            msg = ofp_parser.OFPPacketOut(
+                datapath=dp,
+                buffer_id=ofp.OFP_NO_BUFFER,
+                in_port=ofp.OFPP_CONTROLLER,
+                actions=actions,
+                data=out_pkt)
             dp.send_msg(msg) # 	Queue an OpenFlow message to send to the corresponding switch
+            self.logger.info("Sent ARP Reply: %s is at %s", arp_pkt.dst_ip, router_mac)
         else:
             # drop the packet, not for the router
             pass
@@ -296,6 +338,7 @@ class LearningSwitch(app_manager.RyuApp):
             # Continue with previously buffered packets (e.g. ICMP echo requests)
             for (ev, dst_ip) in self.router_event_buffer:
                 if dst_ip in self.router_arp_table:
+                    self.logger.info("Continuing with buffered packet for %s", dst_ip)
                     self._packet_in_router_handler(ev)
                     self.router_event_buffer.remove((ev, dst_ip))
         else: 
@@ -355,10 +398,17 @@ class LearningSwitch(app_manager.RyuApp):
 
         # Send the packet out to the switch either to the known port or flood it
         # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
-        msg = ofp_parser.OFPPacketOut(dp, ofp.OFP_NO_BUFFER, in_port, actions, msg.data)
+        msg = ofp_parser.OFPPacketOut(
+            datapath=dp,
+            buffer_id=ofp.OFP_NO_BUFFER,
+            in_port=in_port,
+            actions=actions,
+            data=msg.data)
         dp.send_msg(msg) # 	Queue an OpenFlow message to send to the corresponding switch
         
-    def _in_same_subnet(ip1, ip2):
-        network1 = ipaddress.ip_network(f"{ip1}/24", strict=False) # 255.255.255.0 -> 11111111.11111111.11111111.00000000 -> /24
-        network2 = ipaddress.ip_network(f"{ip2}/24", strict=False)
+    def _in_same_subnet(self, ip1, ip2, netmask='255.255.255.0'):
+        net = ipaddress.IPv4Network(f"0.0.0.0/{netmask}")
+        prefix_len = net.prefixlen
+        network1 = ipaddress.ip_network(f"{ip1}/{prefix_len}", strict=False)
+        network2 = ipaddress.ip_network(f"{ip2}/{prefix_len}", strict=False)
         return network1.network_address == network2.network_address
