@@ -122,7 +122,7 @@ class LearningSwitch(app_manager.RyuApp):
                 # check if the packet is an ICMP echo request
                 if ip_pkt.proto == ipv4.inet.IPPROTO_ICMP:
                     self.logger.info("Received ICMP echo request from %s to %s", src_ip, dst_ip)
-                    self._handle_icmp_request(dp, ip_pkt, eth, in_port)
+                    self._handle_icmp_request(dp, pkt, in_port)
                 else:
                     self.logger.info("unsupported protocol")
             else: # packet is not for the router (actual routing)
@@ -248,7 +248,12 @@ class LearningSwitch(app_manager.RyuApp):
             data=out_pkt)
         dp.send_msg(msg)
     
-    def _handle_icmp_request(self, dp, ip_pkt, eth, in_port):
+    def _handle_icmp_request(self, dp, pkt, in_port):
+        eth = pkt.get_protocol(ethernet.ethernet)
+        ip_pkt = pkt.get_protocol(ipv4.ipv4)
+        icmp_pkt = pkt.get_protocol(icmp.icmp)
+        echo_req = icmp_pkt.data
+
         eth_reply = ethernet.ethernet(dst=eth.src, src=eth.dst, ethertype=ether.ETH_TYPE_IP)
         ip_reply = ipv4.ipv4(dst=ip_pkt.src, src=ip_pkt.dst, proto=ipv4.inet.IPPROTO_ICMP)
         
@@ -256,9 +261,9 @@ class LearningSwitch(app_manager.RyuApp):
         # see: https://ryu.readthedocs.io/en/latest/library_packet_ref/packet_icmp.html
         icmp_reply = icmp.icmp( 
             type_=icmp.ICMP_ECHO_REPLY,
-            code=0,
-            csum=0,
-            data=ip_pkt)
+            code=0, # ICMP code for echo reply
+            csum=0, # checksum will be calculated automatically
+            data=icmp.echo(id_=echo_req.id, seq=echo_req.seq, data=echo_req.data))
         
         reply_pkt = packet.Packet()
         reply_pkt.add_protocol(eth_reply)

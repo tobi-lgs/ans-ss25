@@ -35,7 +35,7 @@ class NetworkTopo(Topo):
         Topo.__init__(self)
 
         # Build the specified network topology here
-        h1 = self.addHost('h1', ip='10.0.1.2/24')
+        h1 = self.addHost('h1', ip='10.0.1.2/24', defaultRoute='via 10.0.1.1')
         h2 = self.addHost('h2', ip='10.0.1.3/24')
         ser = self.addHost('ser', ip='10.0.2.2/24')
         ext = self.addHost('ext', ip='192.168.1.123/24')
@@ -72,7 +72,7 @@ def run():
     ext = net.get('ext')
     
     # IP and subnet mask already defined, but default gateway not set yet
-    print(h1.cmd('route add default gw 10.0.1.1'))
+    # print(h1.cmd('route add default gw 10.0.1.1'))
     print(h2.cmd('route add default gw 10.0.1.1'))
     print(ser.cmd('route add default gw 10.0.2.1'))
     print(ext.cmd('route add default gw 192.168.1.1'))
