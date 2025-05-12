@@ -135,6 +135,7 @@ class LearningSwitch(app_manager.RyuApp):
                 elif self._in_same_subnet(dst_ip, self.router_port_to_own_ip.get(3)):
                     self.logger.info("IP packet is for the external network, not allowed")
                     # drop the packet, no communication with the external network allowed
+                    # could add a flow to the router to drop the packet
                     return
                 else:
                     self.logger.info("Target subnet unknown")
@@ -144,6 +145,7 @@ class LearningSwitch(app_manager.RyuApp):
                 if self._in_same_subnet(src_ip, self.router_port_to_own_ip[3]):
                     self.logger.info("IP packet is from the external network, not allowed")
                     # drop the packet, no communication with the external network allowed
+                    # could add a flow to the router to drop the packet
                     return
                 
                 if out_port == in_port: # same subnet
