@@ -29,8 +29,7 @@ from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3, ether
 from ryu.utils import hex_array
-from ryu.lib.packet import packet, ethernet, ether_types # for L2 packets
-from ryu.lib.packet import ipv4, arp, icmp # for L3 and L4 packets
+from ryu.lib.packet import packet, ethernet, ether_types, ipv4, arp, icmp
 import ipaddress
 
 class LearningSwitch(app_manager.RyuApp):
@@ -38,15 +37,12 @@ class LearningSwitch(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(LearningSwitch, self).__init__(*args, **kwargs)
-
-        # Here you can initialize the data structures you want to keep at the controller
         
-        self.router = 3 # The router is the switch with DPID 3
-
         # Layer 2 switch MAC address table
         self.mac_port_map = {} # {dp_id: {mac: port}}
 
         # Layer 3 router port MACs and IP addresses
+        self.router = 3 # The router is the switch with DPID 3
 
         # Router port MACs assumed by the controller
         self.router_port_to_own_mac = {
@@ -67,30 +63,6 @@ class LearningSwitch(app_manager.RyuApp):
         # it will buffer the packet (the event) until the ARP reply is received
         self.router_event_buffer = [] # [(event, dst_ip)]
 
-    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
-    def switch_features_handler(self, ev):
-        
-        datapath = ev.msg.datapath
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-
-        # Initial flow entry for matching misses
-        match = parser.OFPMatch()
-        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
-                                          ofproto.OFPCML_NO_BUFFER)]
-        self.add_flow(datapath, 0, match, actions)
-
-    # Add a flow entry to the flow-table
-    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPFlowMod
-    def add_flow(self, datapath, priority, match, actions):
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-
-        # Construct flow_mod message and send it
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
-                                match=match, instructions=inst)
-        datapath.send_msg(mod)
     
     # Handle the packet_in event
     # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#packet-in-message
@@ -113,10 +85,10 @@ class LearningSwitch(app_manager.RyuApp):
         eth = pkt.get_protocol(ethernet.ethernet)
         
         if eth.ethertype == ether_types.ETH_TYPE_IP:
-            # Handle IP packets here
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
             src_ip = ip_pkt.src
             dst_ip = ip_pkt.dst
+            
             # check if dstip is a router ip but only the gateway ip of the current host
             if self.router_port_to_own_ip[in_port] == dst_ip:
                 # check if the packet is an ICMP echo request
@@ -169,16 +141,19 @@ class LearningSwitch(app_manager.RyuApp):
                     return
                 
         elif eth.ethertype == ether_types.ETH_TYPE_ARP:
-            # Handle ARP packets here
             arp_pkt = pkt.get_protocol(arp.arp)
             if arp_pkt.opcode == arp.ARP_REQUEST:
                 self._handle_arp_request(dp, arp_pkt, eth, in_port)
             elif arp_pkt.opcode == arp.ARP_REPLY:
-                self._handle_arp_reply(dp, arp_pkt, eth, in_port)
-        elif eth.ethertype == ether_types.ETH_TYPE_IPV6:
-            pass # disable IPv6 logging
+                # check if the reply is for one of the router's IP addresses
+                if arp_pkt.dst_ip in self.router_port_to_own_ip.values():
+                    self._handle_arp_reply(arp_pkt)
+                else:
+                    # drop the packet, not for the router
+                    return
+                
         else:
-            self.logger.info("Unsupported ethertype: %s", hex(eth.ethertype))
+            self.logger.debug("Unsupported ethertype: %s", hex(eth.ethertype))
         return
     
     def _route_packet(self, dp, in_port, src_ip, out_port, dst_ip, pkt):
@@ -223,13 +198,13 @@ class LearningSwitch(app_manager.RyuApp):
         
         self.logger.info("Sending ARP Request on port %d: Who-has %s? Tell %s", out_port, dst_ip, src_ip)
         
-        # Create an ARP request packet
         arp_request = arp.arp(
             opcode=arp.ARP_REQUEST,
             src_mac=router_mac,
             dst_mac='ff:ff:ff:ff:ff:ff',
             src_ip=src_ip,
             dst_ip=dst_ip)
+        
         eth_request = ethernet.ethernet(
             ethertype=ether_types.ETH_TYPE_ARP,
             dst='ff:ff:ff:ff:ff:ff',
@@ -248,9 +223,13 @@ class LearningSwitch(app_manager.RyuApp):
             in_port=ofp.OFPP_CONTROLLER, # important: not in_port but OFPP_CONTROLLER
             actions=actions,
             data=out_pkt)
+        
         dp.send_msg(msg)
     
     def _handle_icmp_request(self, dp, pkt, in_port):
+        ofp_parser = dp.ofproto_parser
+        ofp = dp.ofproto
+        
         eth = pkt.get_protocol(ethernet.ethernet)
         ip_pkt = pkt.get_protocol(ipv4.ipv4)
         icmp_pkt = pkt.get_protocol(icmp.icmp)
@@ -275,27 +254,22 @@ class LearningSwitch(app_manager.RyuApp):
         
         actions = [dp.ofproto_parser.OFPActionOutput(in_port)]
         
-        ofp_parser = dp.ofproto_parser
-        ofp = dp.ofproto
-        
         # Send the ICMP reply back to the host
         out = ofp_parser.OFPPacketOut(
             datapath=dp,
             buffer_id=ofp.OFP_NO_BUFFER,
             in_port=ofp.OFPP_CONTROLLER,
             actions=actions,
-            data=reply_pkt.data
-        )
+            data=reply_pkt.data)
+        
         dp.send_msg(out)
     
-    # @todo: clean comments (remove llm comments)
     def _handle_arp_request(self, dp, arp_pkt, eth, in_port):
         ofp_parser = dp.ofproto_parser
         ofp = dp.ofproto
         
         # Check if the request is for one of the router's IP addresses
         if arp_pkt.dst_ip in self.router_port_to_own_ip.values():
-            # Send an ARP reply
             self.logger.info("Received ARP Request: Who-has %s? Tell %s", arp_pkt.dst_ip, arp_pkt.src_ip)
             
             out_port = in_port
@@ -305,6 +279,7 @@ class LearningSwitch(app_manager.RyuApp):
                 ethertype=ether_types.ETH_TYPE_ARP,
                 dst=eth.src,
                 src=router_mac)
+            
             arp_reply = arp.arp(
                 opcode=arp.ARP_REPLY,
                 src_mac=router_mac,
@@ -319,15 +294,16 @@ class LearningSwitch(app_manager.RyuApp):
             
             actions = [dp.ofproto_parser.OFPActionOutput(in_port)]
             
-            # Send the ARP reply back to the host
-            # setting in_port = ofp.OFPP_CONTROLLER is important
+            # Setting in_port = ofp.OFPP_CONTROLLER is important, packet is generated by the controller
             msg = ofp_parser.OFPPacketOut(
                 datapath=dp,
                 buffer_id=ofp.OFP_NO_BUFFER,
                 in_port=ofp.OFPP_CONTROLLER,
                 actions=actions,
                 data=out_pkt)
-            dp.send_msg(msg) # 	Queue an OpenFlow message to send to the corresponding switch
+            
+            dp.send_msg(msg)
+            
             self.logger.info("Sent ARP Reply: %s is at %s", arp_pkt.dst_ip, router_mac)
         else:
             # drop the packet, not for the router
@@ -336,21 +312,17 @@ class LearningSwitch(app_manager.RyuApp):
         self.router_arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
         self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
         
-    def _handle_arp_reply(self, dp, arp_pkt, eth, in_port):
-        # check if the reply is for one of the router's IP addresses
-        if arp_pkt.dst_ip in self.router_port_to_own_ip.values():
-            # Update the ARP table
-            self.router_arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
-            self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
-            # Continue with previously buffered packets (e.g. ICMP echo requests)
-            for (ev, dst_ip) in self.router_event_buffer:
-                if dst_ip in self.router_arp_table:
-                    self.logger.info("Continuing with buffered packet for %s", dst_ip)
-                    self._packet_in_router_handler(ev)
-                    self.router_event_buffer.remove((ev, dst_ip))
-        else: 
-            # drop the packet, not for the router
-            pass
+    def _handle_arp_reply(self, arp_pkt):
+        # Update the ARP table
+        self.router_arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
+        self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
+        
+        # Continue with previously buffered packets (e.g. ICMP echo requests)
+        for (ev, dst_ip) in self.router_event_buffer:
+            if dst_ip in self.router_arp_table:
+                self.logger.info("Continuing with buffered packet for %s", dst_ip)
+                self._packet_in_router_handler(ev)
+                self.router_event_buffer.remove((ev, dst_ip))
 
     def _packet_in_switch_handler(self, ev):
         msg = ev.msg
@@ -359,7 +331,6 @@ class LearningSwitch(app_manager.RyuApp):
         ofp = dp.ofproto                # OpenFlow definitions
         ofp_parser = dp.ofproto_parser  # OpenFlow wire message encoder and decoder
 
-        # Your controller implementation should start here
         in_port = msg.match['in_port']
 
         if msg.reason == ofp.OFPR_NO_MATCH:
@@ -419,3 +390,28 @@ class LearningSwitch(app_manager.RyuApp):
         network1 = ipaddress.ip_network(f"{ip1}/{prefix_len}", strict=False)
         network2 = ipaddress.ip_network(f"{ip2}/{prefix_len}", strict=False)
         return network1.network_address == network2.network_address
+
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    def switch_features_handler(self, ev):
+        
+        datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        # Initial flow entry for matching misses
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                          ofproto.OFPCML_NO_BUFFER)]
+        self.add_flow(datapath, 0, match, actions)
+
+    # Add a flow entry to the flow-table
+    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPFlowMod
+    def add_flow(self, datapath, priority, match, actions):
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        # Construct flow_mod message and send it
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
+                                match=match, instructions=inst)
+        datapath.send_msg(mod)
