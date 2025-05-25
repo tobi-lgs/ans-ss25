@@ -82,10 +82,13 @@ class Fattree:
 		number_of_servers = (switches_per_pod/2) * (num_ports/2) * pods
 		# core switches naming: cs1, cs2, ...
 		# create core switches
+		subnets = num_ports // 2
 		core_switches = []
 		for i in range(num_core_switches):
-			switch = Node(id=f'cs{i+1}', type='core_level_switch')
+			
+			switch = Node(id=f'csp{num_ports}s{(i//subnets)+1}n{(i%subnets)+1}', type='core_level_switch')
 			core_switches.append(switch)
+
         # TODO: Changwe names (servers;switches) to our style???
 		# create pod
 		# topology idea: [upperlayer_switches_pod1, lower_layer_switches_pod1, ...,upperlayer_switches_podk, lower_layer_switches_podk, core_switches] for number of switches in pod
@@ -96,7 +99,7 @@ class Fattree:
 			# create upper layer switches:
 			for i in range(switches_per_pod//2):
 				# upper layer switches naming: usp1s1, usp1s2, ...
-				upper_switch = Node(id=f'usp{pod+1}s{i+1}', type='upper_level_switch')
+				upper_switch = Node(id=f'usp{pod}s{subnets+i}n{1}', type='upper_level_switch')
 				# connect upper layer switches to core switches
 				for j in range(num_ports//2):
 					upper_switch.add_edge(core_switches[j*i])
@@ -107,16 +110,16 @@ class Fattree:
 			for i in range(switches_per_pod // 2):
 				# lower layer switches naming: ls1, ls2, ...
 				# alternatively maybe: lsp1s(i*2+1) ??? --> ask tobi and niklas
-				switch = Node(id=f'lsp{pod+1}s{i+1}', type='lower_level_switch')
+				lower_switch = Node(id=f'lsp{pod}s{subnets+i}n{1}', type='lower_level_switch')
 				for host in range(num_ports//2):
-					server = Node(id=f'serp{pod+1}s{i+1}h{host+1}', type='server')
-					server.add_edge(switch)
+					server = Node(id=f'serp{pod}s{i+1}h{host+1}', type='server')
+					server.add_edge(lower_switch)
 					server_in_pod.append(server)
 				# connnect lower and upper layer switches in pod
 				for upper_switch in upper_layer_switches:
-					switch.add_edge(upper_switch)
+					lower_switch.add_edge(upper_switch)
             
-				lower_layer_switches.append(switch)
+				lower_layer_switches.append(lower_switch)
 			self.servers.extend(server_in_pod)
 			self.switches.extend(upper_layer_switches)
 			self.switches.extend(lower_layer_switches)

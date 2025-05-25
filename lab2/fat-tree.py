@@ -56,7 +56,40 @@ class FattreeNet(Topo):
             print(f"Adding server {server.id} with dpid {server.id}")
             #{server.dpid}")
 
-            #self.addSwitch(switch.id, dpid=switch.dpid, cls=OVSKernelSwitch)
+        for switch in switches:
+            if switch.type == 'core_level_switch':
+                id = switch.id
+                pod_id = id[3]
+                switch_id = id[5]
+                num_id = id[7]
+                ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                s = self.addSwitch(switch.id)
+                #s.cmd('ifconfig %s 10.0.0.100/24', switch.id)
+            else:
+                # pod switches
+                id = switch.id
+                pod_id = id[3]
+                switch_id = id[5]
+                num_id = id[7]
+                ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                s = self.addSwitch(switch.id)
+
+        hosts = []
+        for server in servers:
+            id = server.id
+            # Extracting the pod, switch, and host IDs from the server ID
+            # A bit primitive, but works for the given format for the moment 
+            # TODO: Make it a bit prettier :D --> Shit, the names from topo are allowed to be named after "pod_switch_host" with lower bindings...
+            pod_id = id[4]
+            switch_id = id[6]
+            host_id = id[8]
+            new_ip = f"10.{pod_id}.{switch_id}.{host_id}/24" 
+            # TODO: Default Route???
+            hosts.append(self.addHost(server.id, ip=new_ip, defaultRoute='via 10.0.1.1'))
+            
+        for host, server in zip(hosts, servers):
+            # create links of hosts
+            pass
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
         # TODO: please complete the network generation logic here
