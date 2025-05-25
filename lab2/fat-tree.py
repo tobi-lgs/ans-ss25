@@ -49,6 +49,14 @@ class FattreeNet(Topo):
 		# topology idea: [upperlayer_switches_pod1, lower_layer_switches_pod1, ...,upperlayer_switches_podk, lower_layer_switches_podk, core_switches] for number of switches in pod
         switches = ft_topo.switches
         servers = ft_topo.servers
+        for switch in switches:
+            print(f"Adding switch {switch.id} with dpid {switch.id}")
+        
+        for server in servers:
+            print(f"Adding server {server.id} with dpid {server.id}")
+            #{server.dpid}")
+
+            #self.addSwitch(switch.id, dpid=switch.dpid, cls=OVSKernelSwitch)
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
         # TODO: please complete the network generation logic here
@@ -81,5 +89,5 @@ def run(graph_topo):
 
 if __name__ == '__main__':
     k = 4
-    ft_topo = topo.Fattree(k=4)
+    ft_topo = Fattree(num_ports=4)
     run(ft_topo)
