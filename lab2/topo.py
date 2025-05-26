@@ -68,30 +68,37 @@ class Fattree:
 
 	def generate(self, num_ports):
 		# claculate number of switches for overview
-		print(type(num_ports))
 		pods = num_ports
 		switches_per_pod = num_ports
 		num_core_switches = num_ports**2 // 4
 
 		# create core switches
-		number_of_switches = pods * switches_per_pod + num_core_switches
+		#number_of_switches = pods * switches_per_pod + num_core_switches
 		# number of hosts from paper
 		#number_of_servers = num_ports**3/4
 
 		# number of hosts from thoughts
-		number_of_servers = (switches_per_pod/2) * (num_ports/2) * pods
+		#number_of_servers = (switches_per_pod/2) * (num_ports/2) * pods
 		# core switches naming: cs1, cs2, ...
 		# create core switches
+		#10.pod.switch.host
+		#Core-Switches
+		#10.4.1.1
+		#10.4.1.2
+		#10.4.2.1
+		#10.4.2.2
+
+
 		subnets = num_ports // 2
 		core_switches = []
 		for i in range(num_core_switches):
-			
 			switch = Node(id=f'csp{num_ports}s{(i//subnets)+1}n{(i%subnets)+1}', type='core_level_switch')
 			core_switches.append(switch)
 
         # TODO: Changwe names (servers;switches) to our style???
 		# create pod
 		# topology idea: [upperlayer_switches_pod1, lower_layer_switches_pod1, ...,upperlayer_switches_podk, lower_layer_switches_podk, core_switches] for number of switches in pod
+
 		for pod in range(pods):
 			upper_layer_switches = []
 			lower_layer_switches = []
@@ -99,10 +106,10 @@ class Fattree:
 			# create upper layer switches:
 			for i in range(switches_per_pod//2):
 				# upper layer switches naming: usp1s1, usp1s2, ...
-				upper_switch = Node(id=f'usp{pod}s{subnets+i}n{1}', type='upper_level_switch')
+				upper_switch = Node(id=f'asp{pod}s{subnets+i}n{1}', type='aggregation_level_switch')
 				# connect upper layer switches to core switches
 				for j in range(num_ports//2):
-					upper_switch.add_edge(core_switches[j*i])
+					upper_switch.add_edge(core_switches[j*(num_ports//2)+i])
 				upper_layer_switches.append(upper_switch)
 			
 			# seperated for readability (could be done in one loop)
@@ -110,9 +117,9 @@ class Fattree:
 			for i in range(switches_per_pod // 2):
 				# lower layer switches naming: ls1, ls2, ...
 				# alternatively maybe: lsp1s(i*2+1) ??? --> ask tobi and niklas
-				lower_switch = Node(id=f'lsp{pod}s{subnets+i}n{1}', type='lower_level_switch')
+				lower_switch = Node(id=f'esp{pod}s{i}n{1}', type='edge_level_switch')
 				for host in range(num_ports//2):
-					server = Node(id=f'serp{pod}s{i+1}h{host+1}', type='server')
+					server = Node(id=f'serp{pod}s{i+1}n{host+1}', type='server')
 					server.add_edge(lower_switch)
 					server_in_pod.append(server)
 				# connnect lower and upper layer switches in pod
@@ -124,5 +131,6 @@ class Fattree:
 			self.switches.extend(upper_layer_switches)
 			self.switches.extend(lower_layer_switches)
 		self.switches.extend(core_switches)
+
 
 	# TODO: code for generating the fat-tree topology

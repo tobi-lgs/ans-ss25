@@ -36,6 +36,7 @@ from mininet.topo import Topo
 from mininet.util import waitListening, custom
 
 from topo import Fattree
+import topo
 
 
 class FattreeNet(Topo):
@@ -49,12 +50,14 @@ class FattreeNet(Topo):
 		# topology idea: [upperlayer_switches_pod1, lower_layer_switches_pod1, ...,upperlayer_switches_podk, lower_layer_switches_podk, core_switches] for number of switches in pod
         switches = ft_topo.switches
         servers = ft_topo.servers
+        switch_host_dic = {} # {switch_id: switch_object}
+        
+
         for switch in switches:
             print(f"Adding switch {switch.id} with dpid {switch.id}")
-        
         for server in servers:
             print(f"Adding server {server.id} with dpid {server.id}")
-            #{server.dpid}")
+
 
         for switch in switches:
             if switch.type == 'core_level_switch':
@@ -62,19 +65,19 @@ class FattreeNet(Topo):
                 pod_id = id[3]
                 switch_id = id[5]
                 num_id = id[7]
-                ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
-                s = self.addSwitch(switch.id)
-                #s.cmd('ifconfig %s 10.0.0.100/24', switch.id)
+                switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                new_switch = self.addSwitch(switch.id)
+                switch_host_dic[switch.id] = new_switch
             else:
                 # pod switches
                 id = switch.id
                 pod_id = id[3]
                 switch_id = id[5]
                 num_id = id[7]
-                ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
-                s = self.addSwitch(switch.id)
+                switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                new_switch = self.addSwitch(switch.id)
+                switch_host_dic[switch.id] = new_switch
 
-        hosts = []
         for server in servers:
             id = server.id
             # Extracting the pod, switch, and host IDs from the server ID
@@ -83,13 +86,29 @@ class FattreeNet(Topo):
             pod_id = id[4]
             switch_id = id[6]
             host_id = id[8]
-            new_ip = f"10.{pod_id}.{switch_id}.{host_id}/24" 
+            server_ip = f"10.{pod_id}.{switch_id}.{host_id}/24" 
             # TODO: Default Route???
-            hosts.append(self.addHost(server.id, ip=new_ip, defaultRoute='via 10.0.1.1'))
-            
-        for host, server in zip(hosts, servers):
-            # create links of hosts
-            pass
+            new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
+            switch_host_dic[server.id] = new_host
+
+        for switch in switches:
+            print(len(switch.edges))
+            for edge in switch.edges:
+                #print(edge.lnode.id)
+                #print(edge.rnode.id)
+                lnode = switch_host_dic[edge.lnode.id]
+                rnode = switch_host_dic[edge.rnode.id]
+                self.addLink(lnode, rnode, bw=15, delay='10ms')
+                switch.remove_edge(edge)
+
+        for server in servers:
+            for edge in server.edges:
+                lnode = switch_host_dic[edge.lnode.id]
+                rnode = switch_host_dic[edge.rnode.id]
+                self.addLink(lnode, rnode, bw=15, delay='10ms')
+                server.remove_edge(edge)
+
+
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
         # TODO: please complete the network generation logic here
