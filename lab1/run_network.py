@@ -28,6 +28,8 @@ from mininet.link import TCLink
 from mininet.cli import CLI
 from mininet.log import setLogLevel
 
+# Start Mininet with a custom topology with: sudo python3 run_network.py
+
 class NetworkTopo(Topo):
 
     def __init__(self):
