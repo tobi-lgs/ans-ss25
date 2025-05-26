@@ -3,7 +3,7 @@
 ### Startup
 
 ```bash
-vagrant@ans-vm:~$ sudo -E mn --custom /vagrant/lab0/network_topo.py --topo bridg                                                                                                                                                                                                                                             e --link tc
+vagrant@ans-vm:~$ sudo -E mn --custom /vagrant/lab0/network_topo.py --topo bridge --link tc
 *** No default OpenFlow controller found for default switch!
 *** Falling back to OVS Bridge
 *** Creating network
@@ -13,7 +13,7 @@ h1 h2 h3 h4
 *** Adding switches:
 s1 s2
 *** Adding links:
-(15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h1, s1) (15.00Mbit 10ms delay) (1                                                                                                                                                                                                                                             5.00Mbit 10ms delay) (h2, s1) (15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h3,                                                                                                                                                                                                                                              s2) (15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h4, s2) (20.00Mbit 45ms dela                                                                                                                                                                                                                                             y) (20.00Mbit 45ms delay) (s1, s2)
+(15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h1, s1) (15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h2, s1) (15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h3, s2) (15.00Mbit 10ms delay) (15.00Mbit 10ms delay) (h4, s2) (20.00Mbit 45ms dela                                                                                                                                                                                                                                             y) (20.00Mbit 45ms delay) (s1, s2)
 *** Configuring hosts
 h1 h2 h3 h4
 *** Starting controller
