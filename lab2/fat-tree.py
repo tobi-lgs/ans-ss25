@@ -52,9 +52,6 @@ class FattreeNet(Topo):
         servers = ft_topo.servers
         switch_host_dic = {} # {switch_id: switch_object}
         
-        print(len(servers))
-        print(len(switches))
-
         #for switch in switches:
         #    print(f"Adding switch {switch.id} with dpid {switch.id}")
         #for server in servers:
@@ -104,15 +101,15 @@ class FattreeNet(Topo):
         nodes.extend(switches)
         nodes.extend(servers)
 
-        for server in nodes:
-            print(str(server.id) + " connects " + str(len(server.edges)))
-            for edge in server.edges:
+        for node in nodes:
+            print(str(node.id) + " connects " + str(len(node.edges)))
+            for edge in node.edges:
                 lnode = switch_host_dic[edge.lnode.id]
                 rnode = switch_host_dic[edge.rnode.id]
                 print(edge.lnode.id)
                 print(edge.rnode.id)
                 self.addLink(lnode, rnode, bw=15, delay='10ms')
-                server.remove_edge(edge)
+                node.remove_edge(edge)
 
 
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
