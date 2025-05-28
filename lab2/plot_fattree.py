@@ -1,0 +1,81 @@
+import matplotlib.pyplot as plt
+import networkx as nx
+from topo import Fattree
+
+def plot_fattree(ft_topo, k):
+    import math
+
+    G = nx.Graph()
+    color_map = []
+    pos = {}
+
+    # Y-Achse: Core ganz oben (y=0), Server ganz unten (y=3)
+    layer_mapping = {
+    'core': 0,
+    'aggregation': 1,
+    'edge': 2,
+    'server': 3
+    }
+
+    # Gruppiere Nodes nach Layer, um sie besser zu platzieren
+    layer_nodes = {l: [] for l in layer_mapping}
+
+    for node in ft_topo.servers + ft_topo.switches:
+        if node.type == 'server':
+            layer_nodes['server'].append(node)
+        elif node.id.startswith('e'):
+            layer_nodes['edge'].append(node)
+        elif node.id.startswith('a'):
+            layer_nodes['aggregation'].append(node)
+        elif node.id.startswith('cs'):
+            layer_nodes['core'].append(node)
+        else:
+            continue
+
+        G.add_node(node.id)
+
+    # Manuelle Positionierung: gleichmäßige Verteilung pro Layer
+    for layer, nodes in layer_nodes.items():
+        y = -layer_mapping[layer]  # Y-Achse: oben (0) → unten (negativ)
+        count = len(nodes)
+        spacing = 2  # X-Abstand
+        for i, node in enumerate(sorted(nodes, key=lambda n: n.id)):
+            x = i * spacing
+            pos[node.id] = (x, y)
+
+            # Farbe setzen
+            if layer == 'server':
+                color_map.append('lightblue')
+            elif layer == 'edge':
+                color_map.append('green')
+            elif layer == 'aggregation':
+                color_map.append('orange')
+            elif layer == 'core':
+                color_map.append('red')
+            else:
+                color_map.append('gray')
+
+    # Kanten hinzufügen
+    added = set()
+    for node in ft_topo.servers + ft_topo.switches:
+        for edge in node.edges:
+            a, b = edge.lnode.id, edge.rnode.id
+            link = tuple(sorted([a, b]))
+            if link not in added:
+                G.add_edge(a, b)
+                added.add(link)
+
+    plt.figure(figsize=(max(10, len(G.nodes) * 0.4), 6))
+    nx.draw(G, pos, with_labels=True, node_color=color_map, node_size=700, font_size=7)
+    plt.title(f"Fat-Tree Topology (k={k})")
+    plt.axis('off')
+    plt.tight_layout()
+    plt.savefig(f"fattree_k{k}.pdf", format="pdf")
+    plt.savefig(f"fattree_k{k}.png")
+    print(f"[✓] Grafik gespeichert: fattree_k{k}.png")
+
+
+if __name__ == "__main__":
+    for k in [2, 4, 6]:
+        ft = Fattree(k)
+        plot_fattree(ft, k)
