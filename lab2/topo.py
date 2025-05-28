@@ -49,7 +49,7 @@ class Node:
 
 	# Remove an edge from the node
 	def remove_edge(self, edge):
-		self.edges.remove(edge)
+		edge.remove()
 
 	# Decide if another node is a neighbor
 	def is_neighbor(self, node):

@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import networkx as nx
 from topo import Fattree
+import math
+
 
 def plot_fattree(ft_topo, k):
-    import math
 
     G = nx.Graph()
     color_map = []

@@ -96,26 +96,23 @@ class FattreeNet(Topo):
             # TODO: Default Route???
             new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
             switch_host_dic[server.id] = new_host
-
-
-
-
-        for switch in switches:
+        
+        for switch in servers:
             print(str(switch.id) + " connects " + str(len(switch.edges)))
-            for edge in switch.edges:
+
+        nodes = []
+        nodes.extend(switches)
+        nodes.extend(servers)
+
+        for server in nodes:
+            print(str(server.id) + " connects " + str(len(server.edges)))
+            for edge in server.edges:
                 lnode = switch_host_dic[edge.lnode.id]
                 rnode = switch_host_dic[edge.rnode.id]
+                print(edge.lnode.id)
+                print(edge.rnode.id)
                 self.addLink(lnode, rnode, bw=15, delay='10ms')
-                switch.remove_edge(edge)
-
-        #for server in servers:
-        #    for edge in server.edges:
-        #        lnode = switch_host_dic[edge.lnode.id]
-        #        rnode = switch_host_dic[edge.rnode.id]
-        #        print(edge.lnode.id)
-        #        print(edge.rnode.id)
-        #        #self.addLink(lnode, rnode, bw=15, delay='10ms')
-        #        server.remove_edge(edge)
+                server.remove_edge(edge)
 
 
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
