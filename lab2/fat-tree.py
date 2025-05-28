@@ -52,13 +52,16 @@ class FattreeNet(Topo):
         servers = ft_topo.servers
         switch_host_dic = {} # {switch_id: switch_object}
         
+        print(len(servers))
+        print(len(switches))
 
-        for switch in switches:
-            print(f"Adding switch {switch.id} with dpid {switch.id}")
-        for server in servers:
-            print(f"Adding server {server.id} with dpid {server.id}")
+        #for switch in switches:
+        #    print(f"Adding switch {switch.id} with dpid {switch.id}")
+        #for server in servers:
+        #    print(f"Adding server {server.id} with dpid {server.id}")
 
-
+        s = 0
+        print("Start")
         for switch in switches:
             if switch.type == 'core_level_switch':
                 id = switch.id
@@ -68,6 +71,7 @@ class FattreeNet(Topo):
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
                 new_switch = self.addSwitch(switch.id)
                 switch_host_dic[switch.id] = new_switch
+                s+=1
             else:
                 # pod switches
                 id = switch.id
@@ -77,6 +81,8 @@ class FattreeNet(Topo):
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
                 new_switch = self.addSwitch(switch.id)
                 switch_host_dic[switch.id] = new_switch
+                s+=1
+        print(s)
 
         for server in servers:
             id = server.id
@@ -91,22 +97,25 @@ class FattreeNet(Topo):
             new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
             switch_host_dic[server.id] = new_host
 
+
+
+
         for switch in switches:
-            print(len(switch.edges))
+            print(str(switch.id) + " connects " + str(len(switch.edges)))
             for edge in switch.edges:
-                #print(edge.lnode.id)
-                #print(edge.rnode.id)
                 lnode = switch_host_dic[edge.lnode.id]
                 rnode = switch_host_dic[edge.rnode.id]
                 self.addLink(lnode, rnode, bw=15, delay='10ms')
                 switch.remove_edge(edge)
 
-        for server in servers:
-            for edge in server.edges:
-                lnode = switch_host_dic[edge.lnode.id]
-                rnode = switch_host_dic[edge.rnode.id]
-                self.addLink(lnode, rnode, bw=15, delay='10ms')
-                server.remove_edge(edge)
+        #for server in servers:
+        #    for edge in server.edges:
+        #        lnode = switch_host_dic[edge.lnode.id]
+        #        rnode = switch_host_dic[edge.rnode.id]
+        #        print(edge.lnode.id)
+        #        print(edge.rnode.id)
+        #        #self.addLink(lnode, rnode, bw=15, delay='10ms')
+        #        server.remove_edge(edge)
 
 
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen

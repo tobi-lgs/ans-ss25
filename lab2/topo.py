@@ -94,6 +94,8 @@ class Fattree:
 		for i in range(num_core_switches):
 			switch = Node(id=f'csp{num_ports}s{(i//subnets)+1}n{(i%subnets)+1}', type='core_level_switch')
 			core_switches.append(switch)
+			#print(f'Adding core switch {switch.id}')
+
 
         # TODO: Changwe names (servers;switches) to our style???
 		# create pod
@@ -107,9 +109,11 @@ class Fattree:
 			for i in range(switches_per_pod//2):
 				# upper layer switches naming: usp1s1, usp1s2, ...
 				upper_switch = Node(id=f'asp{pod}s{subnets+i}n{1}', type='aggregation_level_switch')
+
 				# connect upper layer switches to core switches
 				for j in range(num_ports//2):
-					upper_switch.add_edge(core_switches[j*(num_ports//2)+i])
+					#print(str(upper_switch.id)+ " to " + str(core_switches[i * (num_ports // 2) + j].id))
+					upper_switch.add_edge(core_switches[i * (num_ports // 2) + j])
 				upper_layer_switches.append(upper_switch)
 			
 			# seperated for readability (could be done in one loop)
@@ -119,14 +123,16 @@ class Fattree:
 				# alternatively maybe: lsp1s(i*2+1) ??? --> ask tobi and niklas
 				lower_switch = Node(id=f'esp{pod}s{i}n{1}', type='edge_level_switch')
 				for host in range(num_ports//2):
-					server = Node(id=f'serp{pod}s{i+1}n{host+1}', type='server')
+					print(str(lower_switch.id) + " to " + f'serp{pod}s{i+1}n{host+2}')
+					server = Node(id=f'serp{pod}s{i+1}n{host+2}', type='server')
 					server.add_edge(lower_switch)
 					server_in_pod.append(server)
 				# connnect lower and upper layer switches in pod
 				for upper_switch in upper_layer_switches:
 					lower_switch.add_edge(upper_switch)
-            
 				lower_layer_switches.append(lower_switch)
+
+
 			self.servers.extend(server_in_pod)
 			self.switches.extend(upper_layer_switches)
 			self.switches.extend(lower_layer_switches)
