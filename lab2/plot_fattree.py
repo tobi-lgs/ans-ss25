@@ -24,37 +24,36 @@ def plot_fattree(ft_topo, k):
     for node in ft_topo.servers + ft_topo.switches:
         if node.type == 'server':
             layer_nodes['server'].append(node)
+            color_map.append('lightblue')
         elif node.id.startswith('e'):
             layer_nodes['edge'].append(node)
+            color_map.append('green')
         elif node.id.startswith('a'):
             layer_nodes['aggregation'].append(node)
+            color_map.append('orange')
         elif node.id.startswith('cs'):
             layer_nodes['core'].append(node)
+            color_map.append('red')
         else:
             continue
 
         G.add_node(node.id)
 
-    # Manuelle Positionierung: gleichmäßige Verteilung pro Layer
-    for layer, nodes in layer_nodes.items():
-        y = -layer_mapping[layer]  # Y-Achse: oben (0) → unten (negativ)
-        count = len(nodes)
-        spacing = 2  # X-Abstand
-        for i, node in enumerate(sorted(nodes, key=lambda n: n.id)):
-            x = i * spacing
-            pos[node.id] = (x, y)
+    # Manuelle Positionierung: gleichmäßige Verteilung pro Layer, zentriert
+    max_count = max(len(nodes) for nodes in layer_nodes.values())
+    spacing = 20  # X-Abstand (increased for more inter-pod spacing)
 
-            # Farbe setzen
-            if layer == 'server':
-                color_map.append('lightblue')
-            elif layer == 'edge':
-                color_map.append('green')
-            elif layer == 'aggregation':
-                color_map.append('orange')
-            elif layer == 'core':
-                color_map.append('red')
-            else:
-                color_map.append('gray')
+    for layer, nodes in layer_nodes.items():
+        y = -layer_mapping[layer]
+        count = len(nodes)
+        if count == 0:
+            continue
+        total_width = (count - 1) * spacing
+        max_total_width = (max_count - 1) * spacing
+        start_x = (max_total_width - total_width) / 2  # Zentrierung
+        for i, node in enumerate(sorted(nodes, key=lambda n: n.id)):
+            x = start_x + i * spacing
+            pos[node.id] = (x, y)
 
     # Kanten hinzufügen
     added = set()

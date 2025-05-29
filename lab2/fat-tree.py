@@ -57,7 +57,7 @@ class FattreeNet(Topo):
         #for server in servers:
         #    print(f"Adding server {server.id} with dpid {server.id}")
 
-        s = 0
+        count = 0
         print("Start")
         for switch in switches:
             if switch.type == 'core_level_switch':
@@ -68,7 +68,8 @@ class FattreeNet(Topo):
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
                 new_switch = self.addSwitch(switch.id)
                 switch_host_dic[switch.id] = new_switch
-                s+=1
+                count+=1
+                print(f"Adding core switch {switch.id} with IP {switch_ip}")
             else:
                 # pod switches
                 id = switch.id
@@ -78,9 +79,11 @@ class FattreeNet(Topo):
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
                 new_switch = self.addSwitch(switch.id)
                 switch_host_dic[switch.id] = new_switch
-                s+=1
-        print(s)
+                count += 1
+                print(f"Adding pod switch {switch.id} with IP {switch_ip}")
+        print(f"Added {count} switches")
 
+        count = 0
         for server in servers:
             id = server.id
             # Extracting the pod, switch, and host IDs from the server ID
@@ -90,27 +93,26 @@ class FattreeNet(Topo):
             switch_id = id[6]
             host_id = id[8]
             server_ip = f"10.{pod_id}.{switch_id}.{host_id}/24" 
-            # TODO: Default Route???
+            # TODO: Default Route??? -> Set to corresponding lower level switch
             new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
             switch_host_dic[server.id] = new_host
-        
-        for switch in servers:
-            print(str(switch.id) + " connects " + str(len(switch.edges)))
+            count += 1
+            print(f"Adding server {server.id} with IP {switch_ip}")
+        print(f"Added {count} servers")
 
         nodes = []
         nodes.extend(switches)
-        nodes.extend(servers)
-
+        nodes.extend(servers) # optional: if all edges of switches are set, servers will be connected
+        count = 0
         for node in nodes:
-            print(str(node.id) + " connects " + str(len(node.edges)))
             for edge in node.edges:
                 lnode = switch_host_dic[edge.lnode.id]
                 rnode = switch_host_dic[edge.rnode.id]
-                print(edge.lnode.id)
-                print(edge.rnode.id)
                 self.addLink(lnode, rnode, bw=15, delay='10ms')
                 node.remove_edge(edge)
-
+                count += 1
+                print(f"Adding link between {lnode} and {rnode}")
+        print(f"Added {count} links")
 
         # TODO: Verbindungen zwischen den Switches und Hosts erstellen
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
@@ -143,6 +145,5 @@ def run(graph_topo):
 
 
 if __name__ == '__main__':
-    k = 4
-    ft_topo = Fattree(num_ports=4)
+    ft_topo = Fattree(4)
     run(ft_topo)
