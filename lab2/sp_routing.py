@@ -54,25 +54,19 @@ class SPRouter(app_manager.RyuApp):
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
     def get_topology_data(self, ev):
-
         # Switches and links in the network
         # The Function get_switch(self, None) outputs the list of switches.
         self.topo_raw_switches = copy.copy(get_switch(self, None))
         # The Function get_link(self, None) outputs the list of links.
         self.topo_raw_links = copy.copy(get_link(self, None))
 
-        """
-        Now you have saved the links and switches of the topo. So you could do all sort of stuf with them. 
-        """
-
-        print(" \t" + "Current Links:")
+        self.logger.info(" \t" + "Current Links:")
         for l in self.topo_raw_links:
-            print (" \t\t" + str(l))
+            self.logger.info(" \t\t" + str(l))
 
-        print(" \t" + "Current Switches:")
+        self.logger.info(" \t" + "Current Switches:")
         for s in self.topo_raw_switches:
-            print (" \t\t" + str(s))
-
+            self.logger.info(" \t\t" + str(s))
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):

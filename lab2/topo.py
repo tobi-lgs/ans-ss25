@@ -112,7 +112,6 @@ class Fattree:
 
 				# connect upper layer switches to core switches
 				for j in range(num_ports//2):
-					print(str(upper_switch.id)+ " to " + str(core_switches[i * (num_ports // 2) + j].id))
 					upper_switch.add_edge(core_switches[i * (num_ports // 2) + j])
 				upper_layer_switches.append(upper_switch)
 			

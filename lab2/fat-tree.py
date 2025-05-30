@@ -21,6 +21,7 @@
 
 #!/usr/bin/env python3
 
+import ipaddress
 import os
 import subprocess
 import time
@@ -65,7 +66,8 @@ class FattreeNet(Topo):
                 switch_id = id[5]
                 num_id = id[7]
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
-                new_switch = self.addSwitch(switch.id)
+                dpid = ip_to_dpid(switch_ip)
+                new_switch = self.addSwitch(switch.id, dpid=dpid)
                 switch_host_dic[switch.id] = new_switch
                 count+=1
                 print(f"Adding core switch {switch.id} with IP {switch_ip}")
@@ -76,7 +78,8 @@ class FattreeNet(Topo):
                 switch_id = id[5]
                 num_id = id[7]
                 switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
-                new_switch = self.addSwitch(switch.id)
+                dpid = ip_to_dpid(switch_ip)
+                new_switch = self.addSwitch(switch.id, dpid=dpid)
                 switch_host_dic[switch.id] = new_switch
                 count += 1
                 print(f"Adding pod switch {switch.id} with IP {switch_ip}")
@@ -96,15 +99,13 @@ class FattreeNet(Topo):
             new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
             switch_host_dic[server.id] = new_host
             count += 1
-            print(f"Adding server {server.id} with IP {switch_ip}")
+            print(f"Adding server {server.id} with IP {server_ip}")
         print(f"Added {count} servers")
 
         nodes = []
         nodes.extend(switches)
         nodes.extend(servers) # optional: if all edges of switches are set, servers will be connected
         count = 0
-        for node in nodes:
-            print(f"Node {node.id} has {len(node.edges)} edges")
             
         # Collect all edges to add without duplicates
         all_edges = set()
@@ -120,22 +121,28 @@ class FattreeNet(Topo):
             rnode = switch_host_dic[edge.rnode.id]
             self.addLink(lnode, rnode, bw=15, delay='5ms')
             count += 1
-            print(f"Adding link between {lnode} and {rnode}")
+            # print(f"Adding link between {lnode} and {rnode}")
             
         print(f"Added {count} links")
         
-        # Now safely remove all edges since we're done adding links
+        # (Optional) Now safely remove all edges since we're done adding links
         for (_, edge) in all_edges:
             edge.remove()
-            
-        # Check if any edges remain
-        for node in nodes:
-            print(f"Node {node.id} has {len(node.edges)} edges")
-            for edge in node.edges:
-                print(f"Edge {edge.lnode.id} - {edge.rnode.id} is still not connected")
 
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
         # TODO: please complete the network generation logic here
+        
+def ip_to_dpid(ip_with_cidr):
+    # Strip /24 (or any subnet)
+    ip = ip_with_cidr.split('/')[0]
+    
+    # Convert IP to integer
+    ip_int = int(ipaddress.IPv4Address(ip))
+    
+    # Convert to 16-character hex (DPID must be 8 bytes = 16 hex chars)
+    dpid = f'{ip_int:016x}'
+    
+    return dpid
 
 def make_mininet_instance(graph_topo):
 
@@ -150,6 +157,10 @@ def run(graph_topo):
     # Run the Mininet CLI with a given topology
     lg.setLogLevel('info')
     net = make_mininet_instance(graph_topo)
+    
+    print("\n*** Switches and their DPIDs:")
+    for sw in net.switches:
+        print(f"{sw.name} => DPID: {sw.dpid}")
 
     info('*** Starting network ***\n')
     net.start()
