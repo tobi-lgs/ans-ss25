@@ -118,7 +118,7 @@ class FattreeNet(Topo):
         for (_, edge) in all_edges:
             lnode = switch_host_dic[edge.lnode.id]
             rnode = switch_host_dic[edge.rnode.id]
-            self.addLink(lnode, rnode, bw=15, delay='10ms')
+            self.addLink(lnode, rnode, bw=15, delay='5ms')
             count += 1
             print(f"Adding link between {lnode} and {rnode}")
             
@@ -149,7 +149,6 @@ def run(graph_topo):
 
     # Run the Mininet CLI with a given topology
     lg.setLogLevel('info')
-    mininet.clean.cleanup()
     net = make_mininet_instance(graph_topo)
 
     info('*** Starting network ***\n')
@@ -158,6 +157,7 @@ def run(graph_topo):
     CLI(net)
     info('*** Stopping network ***\n')
     net.stop()
+    mininet.clean.cleanup()
 
 if __name__ == '__main__':
     ft_topo = Fattree(4)
