@@ -74,7 +74,6 @@ def plot_fattree(ft_topo, k):
     plt.savefig(f"fattree_k{k}.png")
     print(f"[✓] Grafik gespeichert: fattree_k{k}.png")
 
-
 if __name__ == "__main__":
     for k in [2, 4, 6]:
         ft = Fattree(k)

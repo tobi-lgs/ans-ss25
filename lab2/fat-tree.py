@@ -38,7 +38,6 @@ from mininet.util import waitListening, custom
 from topo import Fattree
 import topo
 
-
 class FattreeNet(Topo):
     """
     Create a fat-tree network in Mininet
@@ -105,20 +104,38 @@ class FattreeNet(Topo):
         nodes.extend(servers) # optional: if all edges of switches are set, servers will be connected
         count = 0
         for node in nodes:
+            print(f"Node {node.id} has {len(node.edges)} edges")
+            
+        # Collect all edges to add without duplicates
+        all_edges = set()
+        for node in nodes:
             for edge in node.edges:
-                lnode = switch_host_dic[edge.lnode.id]
-                rnode = switch_host_dic[edge.rnode.id]
-                self.addLink(lnode, rnode, bw=15, delay='10ms')
-                node.remove_edge(edge)
-                count += 1
-                print(f"Adding link between {lnode} and {rnode}")
+                # Add tuple of node IDs to set to avoid duplicate edges
+                edge_key = tuple(sorted([edge.lnode.id, edge.rnode.id]))
+                all_edges.add((edge_key, edge))
+                
+        # Add links for each unique edge
+        for (_, edge) in all_edges:
+            lnode = switch_host_dic[edge.lnode.id]
+            rnode = switch_host_dic[edge.rnode.id]
+            self.addLink(lnode, rnode, bw=15, delay='10ms')
+            count += 1
+            print(f"Adding link between {lnode} and {rnode}")
+            
         print(f"Added {count} links")
+        
+        # Now safely remove all edges since we're done adding links
+        for (_, edge) in all_edges:
+            edge.remove()
+            
+        # Check if any edges remain
+        for node in nodes:
+            print(f"Node {node.id} has {len(node.edges)} edges")
+            for edge in node.edges:
+                print(f"Edge {edge.lnode.id} - {edge.rnode.id} is still not connected")
 
-        # TODO: Verbindungen zwischen den Switches und Hosts erstellen
         # TODO: Richtige Ip-Adressen und Subnetze für die Hosts setzen und berechenn
         # TODO: please complete the network generation logic here
-
-
 
 def make_mininet_instance(graph_topo):
 
@@ -127,7 +144,6 @@ def make_mininet_instance(graph_topo):
     net.addController('c0', controller=RemoteController,
                       ip="127.0.0.1", port=6653)
     return net
-
 
 def run(graph_topo):
 
@@ -143,7 +159,7 @@ def run(graph_topo):
     info('*** Stopping network ***\n')
     net.stop()
 
-
 if __name__ == '__main__':
     ft_topo = Fattree(4)
     run(ft_topo)
+    

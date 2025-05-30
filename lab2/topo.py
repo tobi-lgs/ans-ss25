@@ -68,7 +68,7 @@ class Fattree:
 
 	def generate(self, num_ports):
 		# claculate number of switches for overview
-		pods = num_ports
+		num_pods = num_ports
 		switches_per_pod = num_ports
 		num_core_switches = num_ports**2 // 4
 
@@ -100,7 +100,7 @@ class Fattree:
         # TODO: Changwe names (servers;switches) to our style???
 		# Create pods
 		# topology idea: [upperlayer_switches_pod1, lower_layer_switches_pod1, ...,upperlayer_switches_podk, lower_layer_switches_podk, core_switches] for number of switches in pod
-		for pod in range(pods):
+		for pod in range(num_pods):
 			upper_layer_switches = []
 			lower_layer_switches = []
 			server_in_pod = []
