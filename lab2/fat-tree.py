@@ -61,28 +61,20 @@ class FattreeNet(Topo):
         print("Start")
         for switch in switches:
             if switch.type == 'core_level_switch':
-                id = switch.id
-                pod_id = id[3]
-                switch_id = id[5]
-                num_id = id[7]
-                switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                switch_ip = switch.ip + "/24"
                 dpid = ip_to_dpid(switch_ip)
-                new_switch = self.addSwitch(switch.id, dpid=dpid)
+                new_switch = self.addSwitch(f'switch{switch.id}', dpid=dpid)
                 switch_host_dic[switch.id] = new_switch
                 count+=1
-                print(f"Adding core switch {switch.id} with IP {switch_ip}")
+                print(f"Adding core switch{switch.id} with IP {switch_ip}")
             else:
                 # pod switches
-                id = switch.id
-                pod_id = id[3]
-                switch_id = id[5]
-                num_id = id[7]
-                switch_ip = f"10.{pod_id}.{switch_id}.{num_id}/24"
+                switch_ip = switch.ip + "/24"
                 dpid = ip_to_dpid(switch_ip)
-                new_switch = self.addSwitch(switch.id, dpid=dpid)
+                new_switch = self.addSwitch(f'switch{switch.id}', dpid=dpid)
                 switch_host_dic[switch.id] = new_switch
                 count += 1
-                print(f"Adding pod switch {switch.id} with IP {switch_ip}")
+                print(f"Adding pod switch{switch.id} with IP {switch_ip}")
         print(f"Added {count} switches")
 
         count = 0
@@ -91,15 +83,13 @@ class FattreeNet(Topo):
             # Extracting the pod, switch, and host IDs from the server ID
             # A bit primitive, but works for the given format for the moment 
             # TODO: Make it a bit prettier :D --> Shit, the names from topo are allowed to be named after "pod_switch_host" with lower bindings...
-            pod_id = id[4]
-            switch_id = id[6]
-            host_id = id[8]
-            server_ip = f"10.{pod_id}.{switch_id}.{host_id}/24" 
-            # TODO: Default Route??? -> Set to corresponding lower level switch
-            new_host = self.addHost(server.id, ip=server_ip, defaultRoute='via 10.0.1.1')
+            server_ip = server.ip + "/24" 
+            server_network = ipaddress.ip_network(server_ip, strict=False)
+            default_gateway = server_network.network_address + 1
+            new_host = self.addHost(f'srv{server.id}', ip=server_ip, defaultRoute='via ' + str(default_gateway))
             switch_host_dic[server.id] = new_host
             count += 1
-            print(f"Adding server {server.id} with IP {server_ip}")
+            print(f"Adding server {server.id} with IP {server_ip} and gateway {default_gateway}")
         print(f"Added {count} servers")
 
         nodes = []

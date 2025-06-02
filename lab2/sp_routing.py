@@ -1,4 +1,3 @@
-
 """
  Copyright (c) 2025 Computer Networks Group @ UPB
 
@@ -23,6 +22,7 @@
 #!/usr/bin/env python3
 
 import copy
+import ipaddress
 from ryu.base import app_manager
 from ryu.controller import mac_to_port
 from ryu.controller import ofp_event
@@ -54,9 +54,13 @@ class SPRouter(app_manager.RyuApp):
         
         self.arp_table = {} # {ip: mac}
         self.dpid_to_ip = {} # {dpid: ip}
+        self.ip_to_dpid = {} # {ip: dpid}
 
         # Each router has a list of events that it has received but not yet processed
         self.event_buffer = {} # {dpid: [(event, dst_ip)]}
+
+        # Dijkstra's algorithm for shortest path routing
+        
 
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
@@ -69,11 +73,11 @@ class SPRouter(app_manager.RyuApp):
 
         self.logger.info(" \t" + "Current Links:")
         for l in self.topo_raw_links:
-            self.logger.info(" \t\t" + str(l))
+            print(" \t\t" + str(l))
 
         self.logger.info(" \t" + "Current Switches:")
         for s in self.topo_raw_switches:
-            self.logger.info(" \t\t" + str(s))
+            print(" \t\t" + str(s))
             
         # TODO: Graph is already known (self.topo_net), but the ports must be added to the edges
 
@@ -115,18 +119,18 @@ class SPRouter(app_manager.RyuApp):
         ''''
         If the packet is of type ARP
             If the packet is an ARP request
-                If the packet is for the current router
+                If the packet is for the current switch
                     Send ARP reply
-            If the packet is an ARP reply to the router
+            If the packet is an ARP reply to the switch
                 Update ARP table
-                Continue with packets from event buffer of this router if possible
+                Continue with packets from event buffer of this switch if possible
                 
         If the packet is of type IPv4
-            If the packet is destined for the current router
+            If the packet is destined for the current switch
                 Discard the packet, ICMP is not implemented
-            If the packet is not destined for the current router (OSPF routing required)
-                Derive the target router IP by masking the target IP, this is the target vertex for dijkstra's algorithm
-                Execute Dijkstra's algorithm with the current router as the source vertex to find the shortest path to the target vertex by using the learned topology
+            If the packet is not destined for the current switch (OSPF routing required)
+                Derive the target switch IP by masking the target IP, this is the target vertex for dijkstra's algorithm
+                Execute Dijkstra's algorithm with the current switch as the source vertex to find the shortest path to the target vertex by using the learned topology
                 Determine the next hop in the path
                 Get the MAC address of the next hop
                 Create a match, actions entry and add it to the flow table
@@ -137,38 +141,99 @@ class SPRouter(app_manager.RyuApp):
             arp_pkt = pkt.get_protocol(arp.arp)
             
             if arp_pkt.opcode == arp.ARP_REQUEST:
-                # If the request is for one of the router's IP addresses
-                if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
+                # If the request is for one of the switch's IP addresses
+                if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid): # TODO: init self.dpid_to_ip with the switch IPs
                     self._handle_arp_request(dp, arp_pkt, eth, in_port)
                 else:
-                    # drop the packet, not for the router
+                    # drop the packet, not for the switch
                     pass
                 # Update own ARP table whenever a new MAC address is learned
                 self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
                 self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
                 
             elif arp_pkt.opcode == arp.ARP_REPLY:
-                # If the reply was sent to the router
+                # If the reply was sent to the switch
                 if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
                     self._handle_arp_reply(dpid, arp_pkt)
                 else:
-                    # drop the packet, not for the router
+                    # drop the packet, not for the switch
                     return
                 
         elif eth.ethertype == ether_types.ETH_TYPE_IP:
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
             src_ip = ip_pkt.src
             dst_ip = ip_pkt.dst
+
+            self.logger.info("Received IPv4 packet: src=%s, dst=%s", src_ip, dst_ip)
             
-            # If the packet is destined for the current router
+            # If the packet is destined for the current switch
             if dst_ip == self.dpid_to_ip.get(dpid):
                 # Discard the packet, ICMP is not implemented
-                pass
+                self.logger.info("Packet destined for switch %s, but ICMP is not implemented. Discarding packet.", dpid)
             else:
-                # Derive the target router IP by masking the target IP
-                # Execute Dijkstra's algorithm with the current router as the source vertex to find the shortest path to the target vertex by using the learned topology
+                # If target IP is in the same subnet as the switch IP, then skip dijkstra's algorithm
+                    # Forward the packet to the host directly
+                # Else, the packet is not destined for the current switch, so OSPF routing is required
+                # Derive the target switch IP by masking the target IP
+                dst_network = ipaddress.ip_network(f"{dst_ip}/{24}", strict=False)
+                dst_switch_ip = dst_network.network_address + 1
+                self.logger.info("Target switch IP for host %s is: %s", dst_ip, dst_switch_ip)
+                dst_switch_dpid = self.ip_to_dpid.get(dst_switch_ip)
+
+                # Execute Dijkstra's algorithm with the current switch as the source vertex to find the shortest path to the target vertex by using the learned topology
+                start_ip = self.dpid_to_ip.get(dpid)
+                start_node = next( s for s in self.topo_net.switches if s.ip == start_ip )
+                end_node = next( s for s in self.topo_net.switches if s.ip == dst_switch_ip )
+                self.logger.info("Starting Dijkstra's algorithm from %s to %s", start_node.ip, end_node.ip)
+
+                # Initialize Dijkstra's algorithm variables
+                num_switches = len(self.topo_net.switches)
+                distances = [float('inf')] * num_switches
+                previous_nodes = [None] * num_switches
+                distances[start_node.id] = 0
+                visited = [False] * num_switches
+
+                # Dijkstra's algorithm loop
+                for iteration in range(num_switches):
+                    unvisited_indices = [i for i in range(num_switches) if not visited[i]]
+                    if unvisited_indices.is_empty():
+                        break
+        
+                    current_node_idx = min(
+                        unvisited_indices,
+                        key=lambda i: distances[i]
+                    )
+
+                    current_node = next( s for s in self.topo_net.switches if s.id == current_node_idx )
+
+                    visited[current_node_idx] = True
+
+                    for edge in current_node.edges:
+                        neighbor = edge.rnode if edge.lnode == current_node else edge.lnode
+                        if neighbor.type == 'server':
+                            continue
+                        if not visited[neighbor.id]:
+                            new_distance = distances[current_node_idx] + edge.weight
+                            if new_distance < distances[neighbor.id]:
+                                distances[neighbor.id] = new_distance
+                                previous_nodes[neighbor.id] = current_node
+                    
+                    # Log a table with the current distances
+                    for i in range(num_switches):
+                        switch = next(s for s in self.topo_net.switches if s.id == i)
+                        self.logger.info("Distance to switch %s (%s): %s", switch.id, switch.ip, distances[i])
+
                 # Determine the next hop in the path
+                predecessor = previous_nodes[end_node.id]
+                while predecessor.id != start_node.id:
+                    next_hop = predecessor
+                    predecessor = previous_nodes[predecessor.id]
+
                 # Get the MAC address of the next hop
+                if self.arp_table.get(next_hop.ip) is None:
+                    # send an ARP request to the next hop
+                    pass
+                next_hop_mac = self.arp_table.get(next_hop.ip)
                 # Create a match, actions entry and add it to the flow table
                 # Forward the packet to the next hop
                 pass
@@ -231,3 +296,10 @@ class SPRouter(app_manager.RyuApp):
                 self.logger.info("Continuing with buffered packet for %s", dst_ip)
                 self._packet_in_handler(ev)
                 self.event_buffer[dpid].remove((ev, dst_ip))
+
+    def _in_same_subnet(self, ip1, ip2, netmask='255.255.255.0'):
+        net = ipaddress.IPv4Network(f"0.0.0.0/{netmask}")
+        prefix_len = net.prefixlen
+        network1 = ipaddress.ip_network(f"{ip1}/{prefix_len}", strict=False)
+        network2 = ipaddress.ip_network(f"{ip2}/{prefix_len}", strict=False)
+        return network1.network_address == network2.network_address
