@@ -50,7 +50,8 @@ class SPRouter(app_manager.RyuApp):
         super(SPRouter, self).__init__(*args, **kwargs)
         
         # Initialize the topology with #ports=4
-        self.topo_net = topo.Fattree(4)
+        self.k = 4
+        self.topo_net = topo.Fattree(self.k)
         
         self.arp_table = {} # {ip: mac}
 
@@ -120,7 +121,7 @@ class SPRouter(app_manager.RyuApp):
 
         return res
     
-    def _ip_to_dpid(ip):
+    def _ip_to_dpid(self, ip):
         # Convert IP to integer
         ip_int = int(ipaddress.IPv4Address(ip))
         
@@ -217,8 +218,25 @@ class SPRouter(app_manager.RyuApp):
                 if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
                     self._handle_arp_request(dp, arp_pkt, eth, in_port)
                 else:
-                    # drop the packet, not for the switch
-                    pass
+                    # Flood the packet, not for the switch
+                    self.logger.info("ARP request for %s not handled by switch %s, flooding request", arp_pkt.dst_ip, dpid)
+                    out_ports = [i for i in range(1, self.k+1)]
+                    for port in self.dpid_to_port[dpid].values():
+                        out_ports.remove(port)
+                    out_ports.remove(in_port)
+                    self.logger.info("Flooding ARP request to ports: %s", out_ports)
+                    actions = [parser.OFPActionOutput(port) for port in out_ports]
+                    # Send the packet out to the switch either to the known port or flood it
+                    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
+                    msg = parser.OFPPacketOut(
+                        datapath=dp,
+                        buffer_id=ofproto.OFP_NO_BUFFER,
+                        in_port=in_port,
+                        actions=actions,
+                        data=msg.data)
+                    
+                    dp.send_msg(msg)
+
                 # Update own ARP table whenever a new MAC address is learned
                 self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
                 self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
