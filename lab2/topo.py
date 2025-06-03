@@ -31,6 +31,8 @@ class Edge:
 		self.rnode.edges.remove(self)
 		self.lnode = None
 		self.rnode = None
+		self.lnode_port = None
+		self.rnode_port = None
 
 # Class for a node in the graph
 class Node:
@@ -113,7 +115,7 @@ class Fattree:
 			server_in_pod = []
 
 			# Create upper layer switches:
-			for i in range(switches_per_pod//2):
+			for i in range(switches_per_pod // 2):
 				# upper layer switches naming: usp1s1, usp1s2, ...
 				ip = f"10.{pod}.{subnets+i}.1"
 				upper_switch = Node(id=switch_count, type='aggregation_level_switch', ip=ip)
@@ -133,7 +135,7 @@ class Fattree:
 				switch_count += 1
 
 				# Create servers in pod
-				for host in range(num_ports//2):
+				for host in range(num_ports // 2):
 					#print(str(lower_switch.id) + " to " + f'serp{pod}s{i+1}n{host+2}')
 					ip = f"10.{pod}.{i}.{host+2}"
 					server = Node(id=server_count, type='server', ip=ip)

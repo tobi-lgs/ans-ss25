@@ -53,14 +53,81 @@ class SPRouter(app_manager.RyuApp):
         self.topo_net = topo.Fattree(4)
         
         self.arp_table = {} # {ip: mac}
-        self.dpid_to_ip = {} # {dpid: ip}
+
+        self.dpid_to_ip = {} # {dpid: ip
         self.ip_to_dpid = {} # {ip: dpid}
+        for switch in self.topo_net.switches:
+            dpid = self._ip_to_dpid(switch.ip) # use the same encoding as in the Mininet topology
+            self.ip_to_dpid[switch.ip] = dpid
+            self.dpid_to_ip[dpid] = switch.ip
+
+        self.dpid_to_port = {} # {dpid_src: {dpid_dst: src_port}}
 
         # Each router has a list of events that it has received but not yet processed
         self.event_buffer = {} # {dpid: [(event, dst_ip)]}
 
-        # Dijkstra's algorithm for shortest path routing
+        # Run Dijkstra's algorithm for each switch in the topology as the start node
+        self.dijkstra_results = {} # {start_node_id: {end_node_id: (distance, previous_node)}}
+        for switch in self.topo_net.switches:
+            self.dijkstra_results[switch.id] = self.run_dijkstra(switch)
         
+
+    def run_dijkstra(self, start_node):
+        # Dijkstra's algorithm for shortest path routing
+        self.logger.info("Starting Dijkstra's algorithm for %d (%s)", start_node.id, start_node.ip)
+
+        # Initialize Dijkstra's algorithm variables
+        num_switches = len(self.topo_net.switches)
+        distances = [float('inf')] * num_switches
+        previous_nodes = [None] * num_switches
+        distances[start_node.id] = 0
+        visited = [False] * num_switches
+        res = {}
+
+        # Dijkstra's algorithm loop for each end_node
+        for _ in range(num_switches):
+            unvisited_indices = [i for i in range(num_switches) if not visited[i]]
+            if len(unvisited_indices) == 0:
+                break
+
+            current_node_idx = min(
+                unvisited_indices,
+                key=lambda i: distances[i]
+            )
+
+            current_node = next( s for s in self.topo_net.switches if s.id == current_node_idx )
+
+            visited[current_node_idx] = True
+
+            for edge in current_node.edges:
+                neighbor = edge.rnode if edge.lnode == current_node else edge.lnode
+                if neighbor.type == 'server':
+                    continue
+                if not visited[neighbor.id]:
+                    new_distance = distances[current_node_idx] + edge.weight
+                    if new_distance < distances[neighbor.id]:
+                        distances[neighbor.id] = new_distance
+                        previous_nodes[neighbor.id] = current_node
+            
+
+            # Pack results
+            res[current_node.id] = (distances[current_node.id], previous_nodes[neighbor.id])
+
+        # Log a table with the current distances
+        for i in range(num_switches):
+            switch = next(s for s in self.topo_net.switches if s.id == i)
+            self.logger.info("\tDistance to switch %d (%s): %s", switch.id, switch.ip, str(distances[i]))
+
+        return res
+    
+    def _ip_to_dpid(ip):
+        # Convert IP to integer
+        ip_int = int(ipaddress.IPv4Address(ip))
+        
+        # Convert to 16-character hex (DPID must be 8 bytes = 16 hex chars)
+        dpid = f'{ip_int:016x}'
+    
+        return dpid
 
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
@@ -73,14 +140,19 @@ class SPRouter(app_manager.RyuApp):
 
         self.logger.info(" \t" + "Current Links:")
         for l in self.topo_raw_links:
+            if l.src.dpid not in self.dpid_to_port:
+                self.dpid_to_port[l.src.dpid] = {}
+            if l.dst.dpid not in self.dpid_to_port:
+                self.dpid_to_port[l.dst.dpid] = {}
+            # Store the source and destination ports for each link
+            self.dpid_to_port[l.src.dpid][l.dst.dpid] = l.src.port_no # {dpid_src: {dpid_dst: src_port}}
+            self.dpid_to_port[l.dst.dpid][l.src.dpid] = l.dst.port_no # {dpid_dst: {dpid_src: dst_port}}
             print(" \t\t" + str(l))
 
         self.logger.info(" \t" + "Current Switches:")
         for s in self.topo_raw_switches:
             print(" \t\t" + str(s))
             
-        # TODO: Graph is already known (self.topo_net), but the ports must be added to the edges
-
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
@@ -132,7 +204,7 @@ class SPRouter(app_manager.RyuApp):
                 Derive the target switch IP by masking the target IP, this is the target vertex for dijkstra's algorithm
                 Execute Dijkstra's algorithm with the current switch as the source vertex to find the shortest path to the target vertex by using the learned topology
                 Determine the next hop in the path
-                Get the MAC address of the next hop
+                Get the output port of the next hop
                 Create a match, actions entry and add it to the flow table
                 Forward the packet to the next hop
         '''
@@ -178,65 +250,45 @@ class SPRouter(app_manager.RyuApp):
                 dst_network = ipaddress.ip_network(f"{dst_ip}/{24}", strict=False)
                 dst_switch_ip = dst_network.network_address + 1
                 self.logger.info("Target switch IP for host %s is: %s", dst_ip, dst_switch_ip)
-                dst_switch_dpid = self.ip_to_dpid.get(dst_switch_ip)
 
-                # Execute Dijkstra's algorithm with the current switch as the source vertex to find the shortest path to the target vertex by using the learned topology
+                # Get start and end nodes for Dijkstra's algorithm
                 start_ip = self.dpid_to_ip.get(dpid)
                 start_node = next( s for s in self.topo_net.switches if s.ip == start_ip )
                 end_node = next( s for s in self.topo_net.switches if s.ip == dst_switch_ip )
-                self.logger.info("Starting Dijkstra's algorithm from %s to %s", start_node.ip, end_node.ip)
-
-                # Initialize Dijkstra's algorithm variables
-                num_switches = len(self.topo_net.switches)
-                distances = [float('inf')] * num_switches
-                previous_nodes = [None] * num_switches
-                distances[start_node.id] = 0
-                visited = [False] * num_switches
-
-                # Dijkstra's algorithm loop
-                for iteration in range(num_switches):
-                    unvisited_indices = [i for i in range(num_switches) if not visited[i]]
-                    if unvisited_indices.is_empty():
-                        break
-        
-                    current_node_idx = min(
-                        unvisited_indices,
-                        key=lambda i: distances[i]
-                    )
-
-                    current_node = next( s for s in self.topo_net.switches if s.id == current_node_idx )
-
-                    visited[current_node_idx] = True
-
-                    for edge in current_node.edges:
-                        neighbor = edge.rnode if edge.lnode == current_node else edge.lnode
-                        if neighbor.type == 'server':
-                            continue
-                        if not visited[neighbor.id]:
-                            new_distance = distances[current_node_idx] + edge.weight
-                            if new_distance < distances[neighbor.id]:
-                                distances[neighbor.id] = new_distance
-                                previous_nodes[neighbor.id] = current_node
-                    
-                    # Log a table with the current distances
-                    for i in range(num_switches):
-                        switch = next(s for s in self.topo_net.switches if s.id == i)
-                        self.logger.info("Distance to switch %s (%s): %s", switch.id, switch.ip, distances[i])
 
                 # Determine the next hop in the path
-                predecessor = previous_nodes[end_node.id]
+                predecessor = self.dijkstra_results[start_node.id][end_node.id][1]
                 while predecessor.id != start_node.id:
                     next_hop = predecessor
-                    predecessor = previous_nodes[predecessor.id]
+                    predecessor = self.dijkstra_results[start_node.id][next_hop.id][1]
 
-                # Get the MAC address of the next hop
-                if self.arp_table.get(next_hop.ip) is None:
-                    # send an ARP request to the next hop
-                    pass
-                next_hop_mac = self.arp_table.get(next_hop.ip)
-                # Create a match, actions entry and add it to the flow table
+                # Determine output port connected to the next hop
+                next_hop_dpid = self.ip_to_dpid.get(next_hop.ip)
+                out_port = self.dpid_to_port[dpid][next_hop_dpid]
+
+                # Create a match rule for the flow
+                # see: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure
+                match = parser.OFPMatch(
+                    in_port=in_port,
+                    eth_type=ether_types.ETH_TYPE_IP,
+                    ipv4_dst=dst_ip)
+                
+                # Manipulate the ethernet header
+                # see: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPActionSetField
+                actions = [
+                    parser.OFPActionOutput(out_port)
+                ]
+
+                self.add_flow(dp, 1, match, actions) # Add a flow to the router
+
                 # Forward the packet to the next hop
-                pass
+                msg = parser.OFPPacketOut(
+                    datapath=dp, 
+                    buffer_id=ofproto.NO_BUFFER,
+                    in_port=in_port,
+                    actions=actions,
+                    data=pkt.data)
+                dp.send_msg(msg)
         else:
             self.logger.debug("Unsupported ethertype: %s", hex(eth.ethertype))
     
