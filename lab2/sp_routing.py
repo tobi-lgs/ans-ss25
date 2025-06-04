@@ -63,6 +63,7 @@ class SPRouter(app_manager.RyuApp):
             self.dpid_to_ip[dpid] = switch.ip
 
         self.dpid_to_port = {} # {dpid_src: {dpid_dst: src_port}}
+        self.host_ip_to_port = {} # {ip: port}
 
         # Each router has a list of events that it has received but not yet processed
         self.event_buffer = {} # {dpid: [(event, dst_ip)]}
@@ -72,7 +73,6 @@ class SPRouter(app_manager.RyuApp):
         for switch in self.topo_net.switches:
             self.dijkstra_results[switch.id] = self.run_dijkstra(switch)
         
-
     def run_dijkstra(self, start_node):
         # Dijkstra's algorithm for shortest path routing
         self.logger.info("Starting Dijkstra's algorithm for %d (%s)", start_node.id, start_node.ip)
@@ -124,11 +124,7 @@ class SPRouter(app_manager.RyuApp):
     def _ip_to_dpid(self, ip):
         # Convert IP to integer
         ip_int = int(ipaddress.IPv4Address(ip))
-        
-        # Convert to 16-character hex (DPID must be 8 bytes = 16 hex chars)
-        dpid = f'{ip_int:016x}'
-    
-        return dpid
+        return ip_int
 
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
@@ -212,6 +208,8 @@ class SPRouter(app_manager.RyuApp):
         
         if eth.ethertype == ether_types.ETH_TYPE_ARP:
             arp_pkt = pkt.get_protocol(arp.arp)
+
+            self.host_ip_to_port[arp_pkt.src_ip] = in_port
             
             if arp_pkt.opcode == arp.ARP_REQUEST:
                 # If the request is for one of the switch's IP addresses
@@ -224,7 +222,7 @@ class SPRouter(app_manager.RyuApp):
                     for port in self.dpid_to_port[dpid].values():
                         out_ports.remove(port)
                     out_ports.remove(in_port)
-                    self.logger.info("Flooding ARP request to ports: %s", out_ports)
+                    self.logger.info("In-Port: %s, Out-Ports: %s", in_port, out_ports)
                     actions = [parser.OFPActionOutput(port) for port in out_ports]
                     # Send the packet out to the switch either to the known port or flood it
                     # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
@@ -239,15 +237,31 @@ class SPRouter(app_manager.RyuApp):
 
                 # Update own ARP table whenever a new MAC address is learned
                 self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
-                self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
+                self.logger.info("[Request] Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
                 
             elif arp_pkt.opcode == arp.ARP_REPLY:
+                # Update the ARP table
+                self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
+                self.logger.info("[Reply] Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
+
                 # If the reply was sent to the switch
                 if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
                     self._handle_arp_reply(dpid, arp_pkt)
                 else:
-                    # drop the packet, not for the switch
-                    return
+                    # Forward the ARP reply to the host
+                    out_port = self.host_ip_to_port.get(arp_pkt.dst_ip)
+                    self.logger.info("In-Port: %s, Out-Port: %s", in_port, out_port)
+                    actions = [parser.OFPActionOutput(out_port)]
+                    # Send the packet out to the switch either to the known port or flood it
+                    # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
+                    msg = parser.OFPPacketOut(
+                        datapath=dp,
+                        buffer_id=ofproto.OFP_NO_BUFFER,
+                        in_port=in_port,
+                        actions=actions,
+                        data=msg.data)
+                    
+                    dp.send_msg(msg)
                 
         elif eth.ethertype == ether_types.ETH_TYPE_IP:
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
@@ -300,8 +314,6 @@ class SPRouter(app_manager.RyuApp):
                     self.event_buffer[dpid].append((ev, dst_ip))
                     self._flood_arp_request(dp, dst_ip)
             else:
-                # If target IP is in the same subnet as the switch IP, then skip dijkstra's algorithm
-                    # Forward the packet to the host directly
                 # Else, the packet is not destined for the current switch, so OSPF routing is required
                 # Derive the target switch IP by masking the target IP
                 dst_network = ipaddress.ip_network(f"{dst_ip}/{24}", strict=False)
@@ -311,10 +323,11 @@ class SPRouter(app_manager.RyuApp):
                 # Get start and end nodes for Dijkstra's algorithm
                 start_ip = self.dpid_to_ip.get(dpid)
                 start_node = next( s for s in self.topo_net.switches if s.ip == start_ip )
-                end_node = next( s for s in self.topo_net.switches if s.ip == dst_switch_ip )
+                end_node = next( s for s in self.topo_net.switches if s.ip == str(dst_switch_ip) )
 
                 # Determine the next hop in the path
                 predecessor = self.dijkstra_results[start_node.id][end_node.id][1]
+                next_hop = end_node
                 while predecessor.id != start_node.id:
                     next_hop = predecessor
                     predecessor = self.dijkstra_results[start_node.id][next_hop.id][1]
@@ -396,7 +409,7 @@ class SPRouter(app_manager.RyuApp):
     def _handle_arp_reply(self, dpid, arp_pkt):
         # Update the ARP table
         self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
-        self.logger.info("Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
+        self.logger.info("[Reply] Updated ARP table: %s -> %s", arp_pkt.src_ip, arp_pkt.src_mac)
         
         # Continue with previously buffered packets (e.g. ICMP echo requests)
         for (ev, dst_ip) in self.event_buffer.get(dpid, []):
@@ -447,6 +460,7 @@ class SPRouter(app_manager.RyuApp):
         dp.send_msg(msg)
 
     def _in_same_subnet(self, ip1, ip2, netmask='255.255.255.0'):
+        self.logger.info("Checking if %s and %s are in the same subnet with netmask %s", ip1, ip2, netmask)
         net = ipaddress.IPv4Network(f"0.0.0.0/{netmask}")
         prefix_len = net.prefixlen
         network1 = ipaddress.ip_network(f"{ip1}/{prefix_len}", strict=False)
