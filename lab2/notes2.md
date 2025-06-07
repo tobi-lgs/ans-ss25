@@ -6,6 +6,10 @@
 ryu-manager ./sp_routing.py --observe-links
 ```
 
+```bash
+ryu-manager ./ft_routing.py --observe-links
+```
+
 ## Starting Mininet
 
 ```bash
