@@ -85,6 +85,8 @@ class SPRouter(app_manager.RyuApp):
         visited = [False] * num_switches
         res = {}
 
+        # visited[start_node.id] = True
+
         # Dijkstra's algorithm loop for each end_node
         for _ in range(num_switches):
             unvisited_indices = [i for i in range(num_switches) if not visited[i]]
@@ -100,6 +102,9 @@ class SPRouter(app_manager.RyuApp):
 
             visited[current_node_idx] = True
 
+            if current_node_idx == start_node.id:
+                continue
+
             for edge in current_node.edges:
                 neighbor = edge.rnode if edge.lnode == current_node else edge.lnode
                 if neighbor.type == 'server':
@@ -108,17 +113,21 @@ class SPRouter(app_manager.RyuApp):
                     new_distance = distances[current_node_idx] + edge.weight
                     if new_distance < distances[neighbor.id]:
                         distances[neighbor.id] = new_distance
-                        previous_nodes[neighbor.id] = current_node
-            
+                        previous_nodes[neighbor.id] = copy.copy(current_node)
 
             # Pack results
             res[current_node.id] = (distances[current_node.id], previous_nodes[neighbor.id])
+            if start_node.id == 6:
+                self.logger.info("Current node: %d (%s), Distance: %s, Previous node: %s", 
+                                 current_node.id, current_node.ip, distances[current_node.id], 
+                                 previous_nodes[current_node.id].ip if previous_nodes[current_node.id] else None)
 
         # Log a table with the current distances
-        for i in range(num_switches):
-            switch = next(s for s in self.topo_net.switches if s.id == i)
-            self.logger.info("\tDistance to switch %d (%s): %s", switch.id, switch.ip, str(distances[i]))
-
+        # for i in range(num_switches):
+        #     switch = next(s for s in self.topo_net.switches if s.id == i)
+            # self.logger.info("\tDistance to switch %d (%s): %s", switch.id, switch.ip, str(distances[i]))
+        for end_node_id, (dist, prev) in res.items():
+            self.logger.info("Start %s, End: %s -> (Dist: %s,  Prev.IP: %s)", start_node.id, end_node_id, dist, prev.ip if prev else None)
         return res
     
     def _ip_to_dpid(self, ip):
@@ -135,7 +144,7 @@ class SPRouter(app_manager.RyuApp):
         # The Function get_link(self, None) outputs the list of links.
         self.topo_raw_links = copy.copy(get_link(self, None))
 
-        self.logger.info(" \t" + "Current Links:")
+        # self.logger.info(" \t" + "Current Links:")
         for l in self.topo_raw_links:
             if l.src.dpid not in self.dpid_to_port:
                 self.dpid_to_port[l.src.dpid] = {}
@@ -144,11 +153,12 @@ class SPRouter(app_manager.RyuApp):
             # Store the source and destination ports for each link
             self.dpid_to_port[l.src.dpid][l.dst.dpid] = l.src.port_no # {dpid_src: {dpid_dst: src_port}}
             self.dpid_to_port[l.dst.dpid][l.src.dpid] = l.dst.port_no # {dpid_dst: {dpid_src: dst_port}}
-            print(" \t\t" + str(l))
+            # print(" \t\t" + str(l))
 
-        self.logger.info(" \t" + "Current Switches:")
+        # self.logger.info(" \t" + "Current Switches:")
         for s in self.topo_raw_switches:
-            print(" \t\t" + str(s))
+            # print(" \t\t" + str(s))
+            pass
             
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -326,14 +336,26 @@ class SPRouter(app_manager.RyuApp):
                 end_node = next( s for s in self.topo_net.switches if s.ip == str(dst_switch_ip) )
 
                 # Determine the next hop in the path
+                # self.dijkstra_results: {start_node_id: {end_node_id: (distance, previous_node)}}
                 predecessor = self.dijkstra_results[start_node.id][end_node.id][1]
+
+                for end_node_id, (dist, prev) in self.dijkstra_results[start_node.id].items():
+                    self.logger.info("%s -> (%s, %s)", end_node_id, dist, prev.ip if prev else None)
+                    
+                self.logger.info("Init Predecessor for %s to %s is %s", start_node.ip, end_node.ip, predecessor.ip if predecessor else None)
+                # Init Predecessor for 10.0.0.1 to 10.0.1.1 is 10.0.0.1
                 next_hop = end_node
+                self.logger.info("Initial next hop is %s", next_hop.ip)
                 while predecessor.id != start_node.id:
                     next_hop = predecessor
+                    self.logger.info("Next hop updated to %s", next_hop.ip)
                     predecessor = self.dijkstra_results[start_node.id][next_hop.id][1]
+                    self.logger.info("Predecessor updated to %s", predecessor.ip if predecessor else None)
 
                 # Determine output port connected to the next hop
                 next_hop_dpid = self.ip_to_dpid.get(next_hop.ip)
+                self.logger.info("Current DPID: % -> Next DPID: %s", dpid, next_hop_dpid)
+                self.logger.info("Next hop for %s is %s", self.dpid_to_ip[dpid], next_hop.ip)
                 out_port = self.dpid_to_port[dpid][next_hop_dpid]
 
                 # Create a match rule for the flow

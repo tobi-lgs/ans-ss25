@@ -9,7 +9,7 @@ ryu-manager ./sp_routing.py --observe-links
 ## Starting Mininet
 
 ```bash
-./run.sh
+sudo ./run.sh
 ```
 
 ## Topology Discovery
