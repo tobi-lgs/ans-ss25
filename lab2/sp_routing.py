@@ -72,6 +72,11 @@ class SPRouter(app_manager.RyuApp):
         self.dijkstra_results = {} # {start_node_id: {end_node_id: (distance, previous_node)}}
         for switch in self.topo_net.switches:
             self.dijkstra_results[switch.id] = self.run_dijkstra(switch)
+        #for startnode_id in self.dijkstra_results.keys():
+        #    for end_node_id, (dist, prev) in self.dijkstra_results[startnode_id].items():
+        #        self.logger.info("Start %s, End: %s -> (Dist: %s,  Prev.IP: %s)", startnode_id, end_node_id, dist, prev.ip if prev else None)
+                
+
         
     def run_dijkstra(self, start_node):
         # Dijkstra's algorithm for shortest path routing
@@ -102,32 +107,26 @@ class SPRouter(app_manager.RyuApp):
 
             visited[current_node_idx] = True
 
-            if current_node_idx == start_node.id:
-                continue
-
             for edge in current_node.edges:
                 neighbor = edge.rnode if edge.lnode == current_node else edge.lnode
+                #self.logger.info("neighbor: %d (%s), weight: %d", neighbor.id, neighbor.ip, edge.weight)
                 if neighbor.type == 'server':
                     continue
                 if not visited[neighbor.id]:
                     new_distance = distances[current_node_idx] + edge.weight
                     if new_distance < distances[neighbor.id]:
                         distances[neighbor.id] = new_distance
-                        previous_nodes[neighbor.id] = copy.copy(current_node)
+                        previous_nodes[neighbor.id] = current_node
 
             # Pack results
-            res[current_node.id] = (distances[current_node.id], previous_nodes[neighbor.id])
-            if start_node.id == 6:
-                self.logger.info("Current node: %d (%s), Distance: %s, Previous node: %s", 
-                                 current_node.id, current_node.ip, distances[current_node.id], 
-                                 previous_nodes[current_node.id].ip if previous_nodes[current_node.id] else None)
+            #res[current_node.id] = (distances[current_node.id], previous_nodes[neighbor.id])
 
-        # Log a table with the current distances
-        # for i in range(num_switches):
-        #     switch = next(s for s in self.topo_net.switches if s.id == i)
-            # self.logger.info("\tDistance to switch %d (%s): %s", switch.id, switch.ip, str(distances[i]))
-        for end_node_id, (dist, prev) in res.items():
-            self.logger.info("Start %s, End: %s -> (Dist: %s,  Prev.IP: %s)", start_node.id, end_node_id, dist, prev.ip if prev else None)
+        res = {}
+        for i in range(num_switches):
+            res[i] = (distances[i], previous_nodes[i])
+            
+        #for end_node_id, (dist, prev) in res.items():
+        #    self.logger.info("Start %s, End: %s -> (Dist: %s,  Prev.IP: %s)", start_node.id, end_node_id, dist, prev.ip if prev else None)
         return res
     
     def _ip_to_dpid(self, ip):
@@ -171,7 +170,6 @@ class SPRouter(app_manager.RyuApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 0, match, actions)
-
     # Add a flow entry to the flow-table
     def add_flow(self, datapath, priority, match, actions):
         ofproto = datapath.ofproto
@@ -231,7 +229,8 @@ class SPRouter(app_manager.RyuApp):
                     out_ports = [i for i in range(1, self.k+1)]
                     for port in self.dpid_to_port[dpid].values():
                         out_ports.remove(port)
-                    out_ports.remove(in_port)
+                    if in_port in out_ports:
+                        out_ports.remove(in_port)
                     self.logger.info("In-Port: %s, Out-Ports: %s", in_port, out_ports)
                     actions = [parser.OFPActionOutput(port) for port in out_ports]
                     # Send the packet out to the switch either to the known port or flood it
@@ -338,23 +337,14 @@ class SPRouter(app_manager.RyuApp):
                 # Determine the next hop in the path
                 # self.dijkstra_results: {start_node_id: {end_node_id: (distance, previous_node)}}
                 predecessor = self.dijkstra_results[start_node.id][end_node.id][1]
-
-                for end_node_id, (dist, prev) in self.dijkstra_results[start_node.id].items():
-                    self.logger.info("%s -> (%s, %s)", end_node_id, dist, prev.ip if prev else None)
-                    
-                self.logger.info("Init Predecessor for %s to %s is %s", start_node.ip, end_node.ip, predecessor.ip if predecessor else None)
-                # Init Predecessor for 10.0.0.1 to 10.0.1.1 is 10.0.0.1
+                                    # Init Predecessor for 10.0.0.1 to 10.0.1.1 is 10.0.0.1
                 next_hop = end_node
-                self.logger.info("Initial next hop is %s", next_hop.ip)
                 while predecessor.id != start_node.id:
                     next_hop = predecessor
-                    self.logger.info("Next hop updated to %s", next_hop.ip)
                     predecessor = self.dijkstra_results[start_node.id][next_hop.id][1]
-                    self.logger.info("Predecessor updated to %s", predecessor.ip if predecessor else None)
 
                 # Determine output port connected to the next hop
                 next_hop_dpid = self.ip_to_dpid.get(next_hop.ip)
-                self.logger.info("Current DPID: % -> Next DPID: %s", dpid, next_hop_dpid)
                 self.logger.info("Next hop for %s is %s", self.dpid_to_ip[dpid], next_hop.ip)
                 out_port = self.dpid_to_port[dpid][next_hop_dpid]
 
@@ -376,7 +366,7 @@ class SPRouter(app_manager.RyuApp):
                 # Forward the packet to the next hop
                 msg = parser.OFPPacketOut(
                     datapath=dp, 
-                    buffer_id=ofproto.NO_BUFFER,
+                    buffer_id=ofproto.OFP_NO_BUFFER,
                     in_port=in_port,
                     actions=actions,
                     data=pkt.data)
