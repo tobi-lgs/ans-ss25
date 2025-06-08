@@ -23,12 +23,13 @@
 
 import copy
 import ipaddress
+import pprint
 from ryu.base import app_manager
 from ryu.controller import mac_to_port
 from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
-from ryu.ofproto import ofproto_v1_3
+from ryu.ofproto import ofproto_v1_3, ofproto_v1_3_parser
 from ryu.lib.mac import haddr_to_bin
 from ryu.lib.packet import packet
 from ryu.lib.packet import ipv4
@@ -52,9 +53,11 @@ class SPRouter(app_manager.RyuApp):
         # Initialize the topology with #ports=4
         self.k = 4
         self.topo_net = topo.Fattree(self.k)
+        self.topo_call_count = 0
         
         self.arp_table = {} # {ip: mac}
 
+        self.dpid_to_datapth = {} # {dpid: datapath_object}
         self.dpid_to_ip = {} # {dpid: ip
         self.ip_to_dpid = {} # {ip: dpid}
         for switch in self.topo_net.switches:
@@ -76,6 +79,11 @@ class SPRouter(app_manager.RyuApp):
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
     def get_topology_data(self, ev):
+        self.topo_call_count += 1
+        new_switch = ev.switch # switch that has entered the network
+        self.logger.info("New switch detected: %s", new_switch.dp.id)
+        self.dpid_to_datapth[new_switch.dp.id] = new_switch.dp
+
         # Switches and links in the network
         # The Function get_switch(self, None) outputs the list of switches.
         self.topo_raw_switches = copy.copy(get_switch(self, None))
@@ -98,13 +106,13 @@ class SPRouter(app_manager.RyuApp):
             # print(" \t\t" + str(s))
             pass
 
-        if len(self.topo_raw_switches) == len(self.topo_net.switches):
+        if self.topo_call_count == len(self.topo_net.switches):
             self.logger.info("Topology discovery successful: %d switches found", len(self.topo_raw_switches))
             self.add_ft_routing_flows()
 
     def add_ft_routing_flows(self):
         k = self.k
-        parser = # TODO: get parser without having a dp object
+        parser = ofproto_v1_3_parser
 
         # Algorithm 1: Generating aggregation switch routing tables
         for pod_x in range(0, k-1 + 1):
@@ -120,32 +128,67 @@ class SPRouter(app_manager.RyuApp):
 
                     # Create a match rule for the flow
                     match = parser.OFPMatch(
-                        in_port=in_port,
+                        # in_port=in_port,
                         eth_type=ether_types.ETH_TYPE_IP,
-                        ipv4_dst=dst_ip)
+                        ipv4_dst=out_ip+'/24')  # Match the subnet
                     
                     # Manipulate the ethernet header
                     actions = [
-                        parser.OFPActionSetField(eth_dst=dst_mac),
-                        parser.OFPActionSetField(eth_src=src_mac),
                         parser.OFPActionOutput(out_port)
                     ]
 
-                    self.add_flow(dp, 1, match, actions)
+                    dp = self.dpid_to_datapth[switch_dpid]
+                    self.add_flow(dp, 10, match, actions) # set high priority for prefix match rules
 
                 # addPrefix(switch=10.pod_x.switch_z.1, suffix=0.0.0.0/0, )
                 for host_i in range(2, (k//2)+1 + 1):
                     # addSuffix(switch=10.pod_x.switch_z.1, suffix=0.0.0.host_i/8, port=((host_i - 2 + z) mod (k//2) + k//2)) # low priority
                     ft_port = (host_i - 2 + switch_z) % (k//2) + k//2
                     # (src{2, 3}, dst{2, 3}) ->  1.1, 1.2, 2.1, 2.2
-                    out_ip = f"10.{k}.{(switch_z//2)+1}.{(ft_port//2)+1}"
+                    out_ip = f"10.{k}.{switch_z-(k//2)+1}.{ft_port-(k//2)+1}"
                     out_dpid = self.ip_to_dpid[out_ip]
                     out_port = self.dpid_to_port[switch_dpid][out_dpid]
-                    pass
+                    
+                    # Create a match rule for the flow
+                    match = parser.OFPMatch(
+                        # in_port=in_port,
+                        eth_type=ether_types.ETH_TYPE_IP,
+                        ipv4_dst=(f'0.0.0.{host_i}', '0.0.0.255')) # Match the suffix
+                    
+                    # Manipulate the ethernet header
+                    actions = [
+                        parser.OFPActionOutput(out_port)
+                    ]
+
+                    dp = self.dpid_to_datapth[switch_dpid]
+                    self.add_flow(dp, 1, match, actions) # set low priority for prefix match rules
 
         # TODO: edge layer switch flows
 
         # Algorithm 2: Generating core switch routing table
+        for j in range(1, k//2 + 1):
+            for i in range(1, k//2 + 1):
+                switch_ip = f"10.{k}.{j}.{i}"
+                switch_dpid = self.ip_to_dpid[switch_ip]
+                for dst_pod_x in range(0, k-1 + 1):
+                    # addPrefix(switch=10.k.j.i, prefix=10.dst_pod_x.0.0/16, port=dst_pod_x)
+                    out_ip = f"10.{dst_pod_x}.{j+k//2-1}.1"
+                    out_dpid = self.ip_to_dpid[out_ip]
+                    out_port = self.dpid_to_port[switch_dpid][out_dpid]
+
+                    # Create a match rule for the flow
+                    match = parser.OFPMatch(
+                        # in_port=in_port,
+                        eth_type=ether_types.ETH_TYPE_IP,
+                        ipv4_dst=out_ip+'/16')  # Match the subnet
+                    
+                    # Manipulate the ethernet header
+                    actions = [
+                        parser.OFPActionOutput(out_port)
+                    ]
+
+                    dp = self.dpid_to_datapth[switch_dpid]
+                    self.add_flow(dp, 1, match, actions)
             
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):

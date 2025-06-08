@@ -3,17 +3,23 @@
 ## Starting the Ryu Controller
 
 ```bash
-ryu-manager ./sp_routing.py --observe-links
+clear; ryu-manager ./sp_routing.py --observe-links
 ```
 
 ```bash
-ryu-manager ./ft_routing.py --observe-links
+clear; ryu-manager ./ft_routing.py --observe-links
 ```
 
 ## Starting Mininet
 
 ```bash
-sudo ./run.sh
+clear; sudo ./run.sh
+```
+
+## Dump Flows
+
+```bash	
+sudo ovs-ofctl dump-flows switch1
 ```
 
 ## Topology Discovery

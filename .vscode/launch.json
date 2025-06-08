@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Ryu Manager (ft_routing)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/usr/local/bin/ryu-manager",
+            "args": [
+                "--observe-links",
+                "./ft_routing.py"
+            ],
+            "cwd": "${workspaceFolder}/lab2",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/lab2:${workspaceFolder}/lab2/ryu"
+            }
+        }
+    ]
+}
