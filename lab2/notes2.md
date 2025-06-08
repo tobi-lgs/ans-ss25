@@ -13,7 +13,7 @@ clear; ryu-manager ./ft_routing.py --observe-links
 ## Starting Mininet
 
 ```bash
-clear; sudo ./run.sh
+clear; ./run.sh
 ```
 
 ## Dump Flows
