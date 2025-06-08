@@ -132,7 +132,6 @@ class SPRouter(app_manager.RyuApp):
                         eth_type=ether_types.ETH_TYPE_IP,
                         ipv4_dst=out_ip+'/24')  # Match the subnet
                     
-                    # Manipulate the ethernet header
                     actions = [
                         parser.OFPActionOutput(out_port)
                     ]
@@ -155,7 +154,6 @@ class SPRouter(app_manager.RyuApp):
                         eth_type=ether_types.ETH_TYPE_IP,
                         ipv4_dst=(f'0.0.0.{host_i}', '0.0.0.255')) # Match the suffix
                     
-                    # Manipulate the ethernet header
                     actions = [
                         parser.OFPActionOutput(out_port)
                     ]
@@ -163,7 +161,49 @@ class SPRouter(app_manager.RyuApp):
                     dp = self.dpid_to_datapth[switch_dpid]
                     self.add_flow(dp, 1, match, actions) # set low priority for prefix match rules
 
-        # TODO: edge layer switch flows
+        # Edge layer switch flows
+        for pod_x in range(0, k-1 + 1):
+            for switch_z in range(0, (k//2)-1 + 1):
+                switch_ip = f"10.{pod_x}.{switch_z}.1"
+                switch_dpid = self.ip_to_dpid[switch_ip]
+                for subnet_i in range(0, (k//2)-1 + 1):
+                    # Create a pseudo match rule for prefix matching
+                    match = parser.OFPMatch(
+                        # in_port=in_port,
+                        eth_type=ether_types.ETH_TYPE_IP,
+                        ipv4_dst=switch_ip+'/24')  # Match the subnet
+                    
+                    dp = self.dpid_to_datapth[switch_dpid]
+                    ofproto = dp.ofproto
+                    actions = [
+                        # Send to the controller to do ARP resolution and create the 'real' flow with changing MACs
+                        parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)
+                    ]
+
+                    self.add_flow(dp, 9, match, actions) # set a slightly lower but still high priority for prefix match rules
+
+                # addPrefix(switch=10.pod_x.switch_z.1, suffix=0.0.0.0/0, )
+                for host_i in range(2, (k//2)+1 + 1):
+                    ft_port = (host_i - 2 + switch_z) % (k//2) # 0,1 
+                    # (src{2, 3}, dst{2, 3}) ->  1.1, 1.2, 2.1, 2.2
+                    out_ip = f"10.{pod_x}.{ft_port+(k//2)}.1"
+                    out_dpid = self.ip_to_dpid[out_ip]
+                    out_port = self.dpid_to_port[switch_dpid][out_dpid]
+
+                    self.logger.info("Switch %s: Adding flow for host ID %d to IP %s on port %d", switch_ip, host_i, out_ip, out_port)
+                    
+                    # Create a match rule for the flow
+                    match = parser.OFPMatch(
+                        # in_port=in_port,
+                        eth_type=ether_types.ETH_TYPE_IP,
+                        ipv4_dst=(f'0.0.0.{host_i}', '0.0.0.255')) # Match the suffix
+                    
+                    actions = [
+                        parser.OFPActionOutput(out_port)
+                    ]
+
+                    dp = self.dpid_to_datapth[switch_dpid]
+                    self.add_flow(dp, 1, match, actions) # set low priority for prefix match rules
 
         # Algorithm 2: Generating core switch routing table
         for j in range(1, k//2 + 1):
@@ -182,7 +222,6 @@ class SPRouter(app_manager.RyuApp):
                         eth_type=ether_types.ETH_TYPE_IP,
                         ipv4_dst=out_ip+'/16')  # Match the subnet
                     
-                    # Manipulate the ethernet header
                     actions = [
                         parser.OFPActionOutput(out_port)
                     ]
@@ -314,7 +353,7 @@ class SPRouter(app_manager.RyuApp):
                         parser.OFPActionOutput(out_port)
                     ]
 
-                    self.add_flow(dp, 1, match, actions)
+                    self.add_flow(dp, 10, match, actions)
 
                     # Forward the packet to the host
                     msg = parser.OFPPacketOut(
