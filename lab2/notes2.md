@@ -48,6 +48,73 @@ Link: Port<dpid=167903745, port_no=4, LIVE> to Port<dpid=167903489, port_no=4, L
 
 ### Core Level
 
+Upper left switch:
+
+```bash
+
+```
+
+### Aggregation Level
+
+Middle left switch:
+
+```bash
+
+```
+
+### Edge Level
+
+Bottom left switch:
+
+```bash
+
+```
+
+## FT Routing Tables
+
+### Core Level
+
+Upper left switch:
+
+```bash
+sudo ovs-ofctl dump-flows switch0
+ cookie=0x0, duration=61.085s, table=0, n_packets=61, n_bytes=3660, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=61.036s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=10.0.0.0/16 actions=output:"switch0-eth2"
+ cookie=0x0, duration=61.036s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=10.1.0.0/16 actions=output:"switch0-eth4"
+ cookie=0x0, duration=61.036s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=10.2.0.0/16 actions=output:"switch0-eth1"
+ cookie=0x0, duration=61.036s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=10.3.0.0/16 actions=output:"switch0-eth3"
+ cookie=0x0, duration=61.099s, table=0, n_packets=54, n_bytes=7242, priority=0 actions=CONTROLLER:65535
+```
+
+### Aggregation Level
+
+Middle left switch:
+
+```bash
+sudo ovs-ofctl dump-flows switch4
+ cookie=0x0, duration=118.377s, table=0, n_packets=116, n_bytes=6960, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=118.326s, table=0, n_packets=28, n_bytes=2744, priority=10,ip,nw_dst=10.0.0.0/24 actions=output:"switch4-eth1"
+ cookie=0x0, duration=118.326s, table=0, n_packets=28, n_bytes=2744, priority=10,ip,nw_dst=10.0.1.0/24 actions=output:"switch4-eth4"
+ cookie=0x0, duration=118.326s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=0.0.0.2/0.0.0.255 actions=output:"switch4-eth2"
+ cookie=0x0, duration=118.326s, table=0, n_packets=24, n_bytes=2352, priority=1,ip,nw_dst=0.0.0.3/0.0.0.255 actions=output:"switch4-eth3"
+ cookie=0x0, duration=118.388s, table=0, n_packets=56, n_bytes=7402, priority=0 actions=CONTROLLER:65535
+```
+
+### Edge Level
+
+Bottom left switch:
+
+```bash
+sudo ovs-ofctl dump-flows switch6
+ cookie=0x0, duration=29.664s, table=0, n_packets=16, n_bytes=960, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=26.672s, table=0, n_packets=29, n_bytes=2842, priority=10,ip,nw_dst=10.0.0.3 actions=mod_dl_dst:00:00:00:00:00:02,mod_dl_src:00:00:0a:00:00:01,output:"switch6-eth3"
+ cookie=0x0, duration=26.659s, table=0, n_packets=29, n_bytes=2842, priority=10,ip,nw_dst=10.0.0.2 actions=mod_dl_dst:00:00:00:00:00:01,mod_dl_src:00:00:0a:00:00:01,output:"switch6-eth1"
+ cookie=0x0, duration=29.627s, table=0, n_packets=2, n_bytes=196, priority=9,ip,nw_dst=10.0.0.0/24 actions=CONTROLLER:65535
+ cookie=0x0, duration=29.627s, table=0, n_packets=28, n_bytes=2744, priority=1,ip,nw_dst=0.0.0.2/0.0.0.255 actions=output:"switch6-eth2"
+ cookie=0x0, duration=29.627s, table=0, n_packets=28, n_bytes=2744, priority=1,ip,nw_dst=0.0.0.3/0.0.0.255 actions=output:"switch6-eth4"
+ cookie=0x0, duration=29.672s, table=0, n_packets=43, n_bytes=4766, priority=0 actions=CONTROLLER:65535
+```
+
 ## Testing and Comparing Routing Protocols
 
 | Routing | Client   | Server   | Protocol | Transfer [MBytes] | Bandwidth [Mbits/s] |

@@ -72,11 +72,6 @@ class SPRouter(app_manager.RyuApp):
         self.dijkstra_results = {} # {start_node_id: {end_node_id: (distance, previous_node)}}
         for switch in self.topo_net.switches:
             self.dijkstra_results[switch.id] = self.run_dijkstra(switch)
-        #for startnode_id in self.dijkstra_results.keys():
-        #    for end_node_id, (dist, prev) in self.dijkstra_results[startnode_id].items():
-        #        self.logger.info("Start %s, End: %s -> (Dist: %s,  Prev.IP: %s)", startnode_id, end_node_id, dist, prev.ip if prev else None)
-                
-
         
     def run_dijkstra(self, start_node):
         # Dijkstra's algorithm for shortest path routing
@@ -137,9 +132,6 @@ class SPRouter(app_manager.RyuApp):
     # Topology discovery
     @set_ev_cls(event.EventSwitchEnter)
     def get_topology_data(self, ev):
-        # Switches and links in the network
-        # The Function get_switch(self, None) outputs the list of switches.
-        self.topo_raw_switches = copy.copy(get_switch(self, None))
         # The Function get_link(self, None) outputs the list of links.
         self.topo_raw_links = copy.copy(get_link(self, None))
 
@@ -153,11 +145,6 @@ class SPRouter(app_manager.RyuApp):
             self.dpid_to_port[l.src.dpid][l.dst.dpid] = l.src.port_no # {dpid_src: {dpid_dst: src_port}}
             self.dpid_to_port[l.dst.dpid][l.src.dpid] = l.dst.port_no # {dpid_dst: {dpid_src: dst_port}}
             # print(" \t\t" + str(l))
-
-        # self.logger.info(" \t" + "Current Switches:")
-        for s in self.topo_raw_switches:
-            # print(" \t\t" + str(s))
-            pass
             
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):

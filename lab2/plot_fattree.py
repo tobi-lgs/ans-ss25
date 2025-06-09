@@ -25,13 +25,13 @@ def plot_fattree(ft_topo, k):
         if node.type == 'server':
             layer_nodes['server'].append(node)
             color_map.append('lightblue')
-        elif node.id.startswith('e'):
+        elif node.type == 'edge_level_switch':
             layer_nodes['edge'].append(node)
             color_map.append('green')
-        elif node.id.startswith('a'):
+        elif node.type == 'aggregation_switch':
             layer_nodes['aggregation'].append(node)
             color_map.append('orange')
-        elif node.id.startswith('cs'):
+        elif node.type == 'core_switch':
             layer_nodes['core'].append(node)
             color_map.append('red')
         else:

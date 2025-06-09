@@ -101,11 +101,6 @@ class SPRouter(app_manager.RyuApp):
             self.dpid_to_port[l.dst.dpid][l.src.dpid] = l.dst.port_no # {dpid_dst: {dpid_src: dst_port}}
             # print(" \t\t" + str(l))
 
-        # self.logger.info(" \t" + "Current Switches:")
-        for s in self.topo_raw_switches:
-            # print(" \t\t" + str(s))
-            pass
-
         if self.topo_call_count == len(self.topo_net.switches):
             self.logger.info("Topology discovery successful: %d switches found", len(self.topo_raw_switches))
             self.add_ft_routing_flows()
@@ -342,7 +337,7 @@ class SPRouter(app_manager.RyuApp):
 
                     # Create a match rule for the flow
                     match = parser.OFPMatch(
-                        in_port=in_port,
+                        # in_port=in_port,
                         eth_type=ether_types.ETH_TYPE_IP,
                         ipv4_dst=dst_ip)
                     
