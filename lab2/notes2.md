@@ -79,7 +79,10 @@ Link: Port<dpid=167903745, port_no=4, LIVE> to Port<dpid=167903489, port_no=4, L
 #### FT TCP Results
 
 ![Iperf Fat Tree Routing](iperf_fat_tree_tcp.png)
+![Iperf Fat Tree Routing Bandwidth Result](iperf_tcp_results.png)
+
 
 #### FT UDP Results
 
 ![Iperf Fat Tree Routing](iperf_fat_tree_udp.png)
+![Iperf Fat Tree Routing Packet loss](iperf_udp_packet_loss.png)
