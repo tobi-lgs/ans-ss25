@@ -75,6 +75,13 @@ class Fattree:
 		num_pods = num_ports
 		switches_per_pod = num_ports
 		num_core_switches = num_ports**2 // 4
+		# number of switches from paper
+		expected_switches = 5*num_ports**2 / 4
+		# number of servers from paper
+		expected_servers = num_ports**3 / 4
+		# number of links from paper
+		expected_links = 3*num_ports**3 / 4
+		print(f"Expected switches: {expected_switches}, Expected servers: {expected_servers}, Expected links: {expected_links}")
 
 		# create core switches
 		#number_of_switches = pods * switches_per_pod + num_core_switches
