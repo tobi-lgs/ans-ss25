@@ -86,3 +86,39 @@ Link: Port<dpid=167903745, port_no=4, LIVE> to Port<dpid=167903489, port_no=4, L
 
 ![Iperf Fat Tree Routing](iperf_fat_tree_udp.png)
 ![Iperf Fat Tree Routing Packet loss](iperf_udp_packet_loss.png)
+
+
+### 1. Topology
+
+Expected number of:
+Links = 3*(k**3)/4
+Switches = 5*(k**2)/4 
+Server/Host = k**3/4
+
+| k   | Hosts (k³ / 4) | Switches (5·k² / 4) | Links (3·k³ / 4) |
+|-----|----------------|---------------------|------------------|
+| 2   | 2              | 5                   | 6                |
+| 4   | 16             | 20                  | 48               |
+| 6   | 54             | 45                  | 162              |
+| 8   | 128            | 80                  | 384              |
+| 10  | 250            | 125                 | 750              |
+
+![Topo k=2](../fattree_k2.png)
+
+![Topo k=4](../fattree_k4.png)
+
+![Topo k=6](../fattree_k6.png)
+
+### 2. SP-Routing
+
+Port-Discovery:
+ARP-Handling:
+
+### 3. FT-Routing
+
+Port-Discovery:
+ARP-Handling:
+
+### 4. Routing-Experiments
+(see above)
+
