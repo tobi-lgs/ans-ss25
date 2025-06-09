@@ -207,9 +207,10 @@ sudo ovs-ofctl dump-flows switch6
 ### 1. Topology
 
 Expected number of:
-Links = 3*(k**3)/4
-Switches = 5*(k**2)/4 
-Server/Host = k**3/4
+
+- Links = 3*(k**3)/4
+- Switches = 5*(k**2)/4 
+- Server/Host = k**3/4
 
 | k   | Hosts (k³ / 4) | Switches (5·k² / 4) | Links (3·k³ / 4) |
 |-----|----------------|---------------------|------------------|
@@ -225,16 +226,95 @@ Server/Host = k**3/4
 
 ![Topo k=6](../fattree_k6.png)
 
+>See logs
+
 ### 2. SP-Routing
 
 Port-Discovery:
+
+```python
+# Topology discovery
+@set_ev_cls(event.EventSwitchEnter)
+def get_topology_data(self, ev):
+    self.topo_raw_links = get_link(self, None)
+    for l in self.topo_raw_links:
+        if l.src.dpid not in self.dpid_to_port:
+            self.dpid_to_port[l.src.dpid] = {}
+        if l.dst.dpid not in self.dpid_to_port:
+            self.dpid_to_port[l.dst.dpid] = {}
+        # Store the source and destination ports for each link
+        self.dpid_to_port[l.src.dpid][l.dst.dpid] = l.src.port_no # {dpid_src: {dpid_dst: src_port}}
+        self.dpid_to_port[l.dst.dpid][l.src.dpid] = l.dst.port_no # {dpid_dst: {dpid_src: dst_port}}
+```
+
+Dictionaries to map DPID to IP and vice versa, and to map DPID to port numbers and host IPs to ports:
+
+```python
+self.dpid_to_ip = {} # {dpid: ip
+self.ip_to_dpid = {} # {ip: dpid}
+for switch in self.topo_net.switches:
+    dpid = self._ip_to_dpid(switch.ip) # use the same encoding as in the Mininet topology
+    self.ip_to_dpid[switch.ip] = dpid
+    self.dpid_to_ip[dpid] = switch.ip
+
+self.dpid_to_port = {} # {dpid_src: {dpid_dst: src_port}}
+self.host_ip_to_port = {} # {ip: port}
+```
 ARP-Handling:
+
+```python
+if eth.ethertype == ether_types.ETH_TYPE_ARP:
+    
+    if arp_pkt.opcode == arp.ARP_REQUEST:
+        # If the request is for one of the switch's IP addresses
+        if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
+            self._handle_arp_request(dp, arp_pkt, eth, in_port)
+        else:
+            # Flood the packet to all ports facing hosts but not the port it came in
+            out_ports = [i for i in range(1, self.k+1)]
+            for port in self.dpid_to_port[dpid].values():
+                out_ports.remove(port)
+            if in_port in out_ports:
+                out_ports.remove(in_port)
+            actions = [parser.OFPActionOutput(port) for port in out_ports]
+
+            msg = parser.OFPPacketOut(
+                datapath=dp,
+                buffer_id=ofproto.OFP_NO_BUFFER,
+                in_port=in_port,
+                actions=actions,
+                data=msg.data)
+            
+            dp.send_msg(msg)
+
+        # Update own ARP table whenever a new MAC address is learned
+        self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
+        
+    elif arp_pkt.opcode == arp.ARP_REPLY:
+        # Update the ARP table
+        self.arp_table[arp_pkt.src_ip] = arp_pkt.src_mac
+
+        # If the reply was sent to the switch
+        if arp_pkt.dst_ip == self.dpid_to_ip.get(dpid):
+            self._handle_arp_reply(dpid, arp_pkt)
+        else:
+            # Forward the ARP reply to the host
+            out_port = self.host_ip_to_port.get(arp_pkt.dst_ip)
+            actions = [parser.OFPActionOutput(out_port)]
+            
+            msg = parser.OFPPacketOut(
+                datapath=dp,
+                buffer_id=ofproto.OFP_NO_BUFFER,
+                in_port=in_port,
+                actions=actions,
+                data=msg.data)
+            
+            dp.send_msg(msg)
+```
 
 ### 3. FT-Routing
 
-Port-Discovery:
-ARP-Handling:
-
 ### 4. Routing-Experiments
+
 (see above)
 

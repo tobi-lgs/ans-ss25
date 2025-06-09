@@ -180,26 +180,6 @@ class SPRouter(app_manager.RyuApp):
         eth = pkt.get_protocol(ethernet.ethernet)
 
         # TODO: handle new packets at the controller (ARP and IPv4 packets)
-        ''''
-        If the packet is of type ARP
-            If the packet is an ARP request
-                If the packet is for the current switch
-                    Send ARP reply
-            If the packet is an ARP reply to the switch
-                Update ARP table
-                Continue with packets from event buffer of this switch if possible
-                
-        If the packet is of type IPv4
-            If the packet is destined for the current switch
-                Discard the packet, ICMP is not implemented
-            If the packet is not destined for the current switch (OSPF routing required)
-                Derive the target switch IP by masking the target IP, this is the target vertex for dijkstra's algorithm
-                Execute Dijkstra's algorithm with the current switch as the source vertex to find the shortest path to the target vertex by using the learned topology
-                Determine the next hop in the path
-                Get the output port of the next hop
-                Create a match, actions entry and add it to the flow table
-                Forward the packet to the next hop
-        '''
         
         if eth.ethertype == ether_types.ETH_TYPE_ARP:
             arp_pkt = pkt.get_protocol(arp.arp)
@@ -219,7 +199,7 @@ class SPRouter(app_manager.RyuApp):
                     if in_port in out_ports:
                         out_ports.remove(in_port)
                     actions = [parser.OFPActionOutput(port) for port in out_ports]
-                    # Send the packet out to the switch either to the known port or flood it
+                    
                     # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
                     msg = parser.OFPPacketOut(
                         datapath=dp,
@@ -246,7 +226,7 @@ class SPRouter(app_manager.RyuApp):
                     # Forward the ARP reply to the host
                     out_port = self.host_ip_to_port.get(arp_pkt.dst_ip)
                     actions = [parser.OFPActionOutput(out_port)]
-                    # Send the packet out to the switch either to the known port or flood it
+                    
                     # See: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#ryu.ofproto.ofproto_v1_3_parser.OFPPacketOut
                     msg = parser.OFPPacketOut(
                         datapath=dp,
