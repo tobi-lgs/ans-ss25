@@ -279,7 +279,7 @@ class SPRouter(app_manager.RyuApp):
 
                     # Create a match rule for the flow
                     match = parser.OFPMatch(
-                        in_port=in_port,
+                        # in_port=in_port,
                         eth_type=ether_types.ETH_TYPE_IP,
                         ipv4_dst=dst_ip)
                     
@@ -335,7 +335,7 @@ class SPRouter(app_manager.RyuApp):
                 # Create a match rule for the flow
                 # see: https://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure
                 match = parser.OFPMatch(
-                    in_port=in_port,
+                    # in_port=in_port,
                     eth_type=ether_types.ETH_TYPE_IP,
                     ipv4_dst=dst_ip)
                 

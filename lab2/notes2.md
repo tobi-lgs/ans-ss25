@@ -51,7 +51,26 @@ Link: Port<dpid=167903745, port_no=4, LIVE> to Port<dpid=167903489, port_no=4, L
 Upper left switch:
 
 ```bash
-
+sudo ovs-ofctl dump-flows switch0
+[sudo] password for tobilgs: 
+ cookie=0x0, duration=66.392s, table=0, n_packets=68, n_bytes=4080, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=61.242s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.1.0.2 actions=output:"switch0-eth2"
+ cookie=0x0, duration=61.163s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.0.0.2 actions=output:"switch0-eth3"
+ cookie=0x0, duration=61.104s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.1.0.3 actions=output:"switch0-eth2"
+ cookie=0x0, duration=60.977s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.1.1.2 actions=output:"switch0-eth2"
+ cookie=0x0, duration=60.837s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.1.1.3 actions=output:"switch0-eth2"
+ cookie=0x0, duration=60.714s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.2.0.2 actions=output:"switch0-eth4"
+ cookie=0x0, duration=60.587s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.2.0.3 actions=output:"switch0-eth4"
+ cookie=0x0, duration=60.474s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.2.1.2 actions=output:"switch0-eth4"
+ cookie=0x0, duration=60.352s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.2.1.3 actions=output:"switch0-eth4"
+ cookie=0x0, duration=60.238s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.3.0.2 actions=output:"switch0-eth1"
+ cookie=0x0, duration=60.115s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.3.0.3 actions=output:"switch0-eth1"
+ cookie=0x0, duration=59.980s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.3.1.2 actions=output:"switch0-eth1"
+ cookie=0x0, duration=59.857s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.3.1.3 actions=output:"switch0-eth1"
+ cookie=0x0, duration=59.536s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.0.0.3 actions=output:"switch0-eth3"
+ cookie=0x0, duration=58.358s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.0.1.2 actions=output:"switch0-eth3"
+ cookie=0x0, duration=57.184s, table=0, n_packets=23, n_bytes=2254, priority=1,ip,nw_dst=10.0.1.3 actions=output:"switch0-eth3"
+ cookie=0x0, duration=66.442s, table=0, n_packets=34, n_bytes=2868, priority=0 actions=CONTROLLER:65535
 ```
 
 ### Aggregation Level
@@ -59,7 +78,25 @@ Upper left switch:
 Middle left switch:
 
 ```bash
-
+sudo ovs-ofctl dump-flows switch4
+ cookie=0x0, duration=147.905s, table=0, n_packets=143, n_bytes=8580, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=142.950s, table=0, n_packets=27, n_bytes=2646, priority=1,ip,nw_dst=10.0.1.2 actions=output:"switch4-eth2"
+ cookie=0x0, duration=142.894s, table=0, n_packets=27, n_bytes=2646, priority=1,ip,nw_dst=10.0.0.2 actions=output:"switch4-eth4"
+ cookie=0x0, duration=142.856s, table=0, n_packets=27, n_bytes=2646, priority=1,ip,nw_dst=10.0.1.3 actions=output:"switch4-eth2"
+ cookie=0x0, duration=142.769s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.1.0.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=142.634s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.1.0.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=142.507s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.1.1.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=142.364s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.1.1.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=142.245s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.2.0.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=142.115s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.2.0.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.999s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.2.1.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.880s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.2.1.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.767s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.3.0.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.643s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.3.0.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.508s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.3.1.2 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.387s, table=0, n_packets=7, n_bytes=686, priority=1,ip,nw_dst=10.3.1.3 actions=output:"switch4-eth3"
+ cookie=0x0, duration=141.196s, table=0, n_packets=27, n_bytes=2646, priority=1,ip,nw_dst=10.0.0.3 actions=output:"switch4-eth4"
+ cookie=0x0, duration=147.957s, table=0, n_packets=37, n_bytes=3028, priority=0 actions=CONTROLLER:65535
 ```
 
 ### Edge Level
@@ -67,7 +104,25 @@ Middle left switch:
 Bottom left switch:
 
 ```bash
-
+sudo ovs-ofctl dump-flows switch6
+ cookie=0x0, duration=217.327s, table=0, n_packets=104, n_bytes=6240, priority=65535,dl_dst=01:80:c2:00:00:0e,dl_type=0x88cc actions=CONTROLLER:65535
+ cookie=0x0, duration=212.437s, table=0, n_packets=29, n_bytes=2842, priority=1,ip,nw_dst=10.0.0.3 actions=mod_dl_dst:00:00:00:00:00:02,mod_dl_src:00:00:0a:00:00:01,output:"switch6-eth1"
+ cookie=0x0, duration=212.421s, table=0, n_packets=29, n_bytes=2842, priority=1,ip,nw_dst=10.0.0.2 actions=mod_dl_dst:00:00:00:00:00:01,mod_dl_src:00:00:0a:00:00:01,output:"switch6-eth3"
+ cookie=0x0, duration=212.379s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.0.1.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=212.285s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.0.1.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=212.200s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.1.0.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=212.061s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.1.0.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.936s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.1.1.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.797s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.1.1.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.676s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.2.0.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.543s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.2.0.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.427s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.2.1.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.309s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.2.1.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.196s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.3.0.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=211.071s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.3.0.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=210.937s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.3.1.2 actions=output:"switch6-eth4"
+ cookie=0x0, duration=210.820s, table=0, n_packets=3, n_bytes=294, priority=1,ip,nw_dst=10.3.1.3 actions=output:"switch6-eth4"
+ cookie=0x0, duration=217.376s, table=0, n_packets=48, n_bytes=3720, priority=0 actions=CONTROLLER:65535
 ```
 
 ## FT Routing Tables
@@ -146,14 +201,15 @@ sudo ovs-ofctl dump-flows switch6
 #### FT TCP Results
 
 ![Iperf Fat Tree Routing](iperf_fat_tree_tcp.png)
+
 ![Iperf Fat Tree Routing Bandwidth Result](iperf_tcp_results.png)
 
 
 #### FT UDP Results
 
 ![Iperf Fat Tree Routing](iperf_fat_tree_udp.png)
-![Iperf Fat Tree Routing Packet loss](iperf_udp_packet_loss.png)
 
+![Iperf Fat Tree Routing Packet loss](iperf_udp_packet_loss.png)
 
 ### 1. Topology
 
