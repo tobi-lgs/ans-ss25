@@ -186,30 +186,23 @@ sudo ovs-ofctl dump-flows switch6
 | FT      | 10.0.0.2 | 10.2.1.2 | UDP      | 37.5              | 15                  | 0.698       | 13             |
 | FT      | 10.0.0.3 | 10.2.1.3 | UDP      | 37.5              | 15                  | 1.173       | 13             |
 
-### SP-Routing iperf results
+### iperf Results
 
-#### SP TCP Results
-
-![Iperf SP Routing](iperf_sp_tcp.png)
-
-#### SP UDP Results
-
-![Iperf SP Routing](iperf_sp_udp.png)
-
-### FT-Routing iperf results
-
-#### FT TCP Results
-
-![Iperf Fat Tree Routing](iperf_fat_tree_tcp.png)
+#### TCP Results
 
 ![Iperf Fat Tree Routing Bandwidth Result](iperf_tcp_results.png)
 
-
-#### FT UDP Results
-
-![Iperf Fat Tree Routing](iperf_fat_tree_udp.png)
+#### UDP Results
 
 ![Iperf Fat Tree Routing Packet loss](iperf_udp_packet_loss.png)
+
+<!-- ![Iperf SP Routing](iperf_sp_tcp.png) -->
+
+<!-- ![Iperf SP Routing](iperf_sp_udp.png) -->
+
+<!-- ![Iperf Fat Tree Routing](iperf_fat_tree_tcp.png) -->
+
+<!-- ![Iperf Fat Tree Routing](iperf_fat_tree_udp.png) -->
 
 ### 1. Topology
 

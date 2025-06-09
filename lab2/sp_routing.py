@@ -133,7 +133,7 @@ class SPRouter(app_manager.RyuApp):
     @set_ev_cls(event.EventSwitchEnter)
     def get_topology_data(self, ev):
         # The Function get_link(self, None) outputs the list of links.
-        self.topo_raw_links = copy.copy(get_link(self, None))
+        self.topo_raw_links = get_link(self, None)
 
         # self.logger.info(" \t" + "Current Links:")
         for l in self.topo_raw_links:
